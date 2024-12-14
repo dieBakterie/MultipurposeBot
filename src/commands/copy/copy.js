@@ -1,12 +1,8 @@
-// Importieren der erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
 import { exportsConfig } from "../../config.js";
-const {
-  DiscordUserFeedbackErrorEmoji,
-  DiscordUserFeedbackSuccessEmoji,
-  DiscordUserFeedbackListEmoji,
-  DiscordUserFeedbackInfoEmoji,
-} = exportsConfig;
+
+const { DiscordUserFeedbackErrorEmoji, DiscordUserFeedbackSuccessEmoji } =
+  exportsConfig;
 
 export default {
   data: new SlashCommandBuilder()
@@ -68,20 +64,32 @@ export default {
       } else {
         // Nachrichtenanzahl basierend auf `count` abrufen
         const messages = await sourceChannel.messages.fetch({ limit: count });
-        messagesToCopy = [...messages.values()].reverse(); // In korrekter Reihenfolge
+        messagesToCopy = [...messages.values()].reverse(); // Nachrichten in korrekter Reihenfolge
       }
 
       // Nachrichten in den Zielkanal posten
       for (const message of messagesToCopy) {
-        const content = message.content || "**(Keine Textnachricht)**";
-        const attachments = message.attachments.map((a) => a.url);
+        const options = {};
 
-        let postContent = `${content}`;
-        if (attachments.length > 0) {
-          postContent += `\n${attachments.join("\n")}`;
+        // Füge den Nachrichtentext hinzu
+        if (message.content) {
+          options.content = message.content;
         }
 
-        await targetChannel.send({ content: postContent });
+        // Füge Attachments hinzu
+        if (message.attachments.size > 0) {
+          options.files = message.attachments.map(
+            (attachment) => attachment.url
+          );
+        }
+
+        // Füge Embeds hinzu
+        if (message.embeds.length > 0) {
+          options.embeds = message.embeds.map((embed) => embed.toJSON());
+        }
+
+        // Reposte die Nachricht in den Zielkanal
+        await targetChannel.send(options);
       }
 
       return interaction.reply({

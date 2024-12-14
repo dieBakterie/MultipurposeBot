@@ -81,7 +81,7 @@ export default {
 
         if (!channel || channel.type !== ChannelType.GuildText) {
           return interaction.reply({
-            content: `${TwitchUserFeedbackErrorEmoji} Der Kanal <#${channel?.id}> ist ungültig oder existiert nicht.`,
+            content: `${TwitchUserFeedbackErrorEmoji} Der Kanal <#${channel?.id}> ist ungültig oder kein Textkanal.`,
             ephemeral: true,
           });
         }
@@ -96,10 +96,17 @@ export default {
             });
           }
 
-          await addTwitchChannel(streamername, channel.id);
-          return interaction.reply(
-            `${TwitchUserFeedbackSuccessEmoji} Der Streamer **${streamername}** wurde erfolgreich hinzugefügt und Benachrichtigungen werden an <#${channel.id}> gesendet.`
+          // Speichere sowohl die Kanal-ID als auch den Kanalnamen
+          const result = await addTwitchChannel(
+            streamername,
+            channel.name, // Channel-Name
+            channel.id // Channel-ID
           );
+
+          return interaction.reply({
+            content: `${TwitchUserFeedbackSuccessEmoji} Der Streamer **${streamername}** wurde erfolgreich hinzugefügt und Benachrichtigungen werden an **${channel.name}** (<#${channel.id}>) gesendet.`,
+            ephemeral: false,
+          });
         } catch (error) {
           console.error(
             "Fehler beim Hinzufügen des Streamers:",
@@ -124,11 +131,13 @@ export default {
         }
 
         try {
-          const updated = await setDiscordChannelForStreamer(
+          const result = await setDiscordChannelForStreamer(
             streamername,
-            channel.id
+            channel.name, // Channel-Name
+            channel.id // Channel-ID
           );
-          if (!updated) {
+
+          if (!result.success) {
             return interaction.reply({
               content: `${TwitchUserFeedbackInfoEmoji} Der Streamer **${streamername}** wurde nicht gefunden.`,
               ephemeral: true,
@@ -136,7 +145,7 @@ export default {
           }
 
           return interaction.reply({
-            content: `${TwitchUserFeedbackSuccessEmoji} Der Discord-Kanal für **${streamername}** wurde erfolgreich auf <#${channel.id}> geändert.`,
+            content: `${TwitchUserFeedbackSuccessEmoji} Der Discord-Kanal für **${streamername}** wurde erfolgreich auf **${channel.name}** (<#${channel.id}>) geändert.`,
             ephemeral: false,
           });
         } catch (error) {

@@ -4,8 +4,8 @@
   "main": "./src/index.js",
   "type": "module",
   "scripts": {
-    "start": "clear && node ./src/index.js",
-    "config": "clear && node ./src/config.js",
+    "start": "clear && git add . && node ./src/index.js",
+    "config": "clear && git add . && node ./src/config.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
