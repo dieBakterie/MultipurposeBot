@@ -1,0 +1,23 @@
+{
+  "name": "multipurposebot",
+  "version": "1.0.0",
+  "main": "./src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "clear && node ./src/index.js",
+    "config": "clear && node ./src/config.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "derDelphin",
+  "license": "ISC",
+  "description": "A multipurpose bot for Discord",
+  "dependencies": {
+    "@discordjs/voice": "^0.18.0",
+    "axios": "^1.7.9",
+    "discord.js": "^14.16.3",
+    "dotenv-safe": "^9.1.0",
+    "pg": "^8.13.1",
+    "winston": "^3.17.0"
+  }
+}
