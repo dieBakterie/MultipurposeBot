@@ -5,7 +5,7 @@ import {
   getTrackedTwitchChannels,
   setDiscordChannelForStreamer,
 } from "../../database/twitchDatabase.js";
-import { getTwitchStreamDetails } from "../../services/twitch.js";
+import { searchTwitchUser } from "../../services/twitch.js";
 import { exportsConfig } from "../../config.js";
 
 const {
@@ -25,8 +25,9 @@ export default {
         .setDescription("Füge einen Twitch-Streamer hinzu.")
         .addStringOption((option) =>
           option
-            .setName("streamername")
+            .setName("streamer_name")
             .setDescription("Der Twitch-Username des Streamers.")
+            .setAutocomplete(true)
             .setRequired(true)
         )
         .addChannelOption((option) =>
@@ -44,14 +45,11 @@ export default {
         .setDescription("Entferne einen Twitch-Streamer.")
         .addStringOption((option) =>
           option
-            .setName("streamername")
+            .setName("streamer_name")
             .setDescription("Der Twitch-Username des Streamers.")
             .setAutocomplete(true)
             .setRequired(true)
         )
-    )
-    .addSubcommand((subcommand) =>
-      subcommand.setName("list").setDescription("Liste aller Twitch-Streamer.")
     )
     .addSubcommand((subcommand) =>
       subcommand
@@ -59,7 +57,7 @@ export default {
         .setDescription("Ändere den Discord-Kanal eines Streamers.")
         .addStringOption((option) =>
           option
-            .setName("streamername")
+            .setName("streamer_name")
             .setDescription("Der Twitch-Username des Streamers.")
             .setAutocomplete(true)
             .setRequired(true)
@@ -70,13 +68,16 @@ export default {
             .setDescription("Der neue Discord-Channel.")
             .setRequired(true)
         )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand.setName("list").setDescription("Liste aller Twitch-Streamer.")
     ),
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
 
     switch (subcommand) {
       case "add": {
-        const streamername = interaction.options.getString("streamername");
+        const streamername = interaction.options.getString("streamer_name");
         const channel = interaction.options.getChannel("channel_id");
 
         if (!channel || channel.type !== ChannelType.GuildText) {
@@ -87,7 +88,7 @@ export default {
         }
 
         try {
-          const streamDetails = await getTwitchStreamDetails(streamername);
+          const streamDetails = await searchTwitchUser(streamername);
 
           if (!streamDetails) {
             return interaction.reply({
@@ -120,7 +121,7 @@ export default {
       }
 
       case "set-channel": {
-        const streamername = interaction.options.getString("streamername");
+        const streamername = interaction.options.getString("streamer_name");
         const channel = interaction.options.getChannel("channel_id");
 
         if (!channel || channel.type !== ChannelType.GuildText) {
@@ -158,7 +159,7 @@ export default {
       }
 
       case "remove": {
-        const streamername = interaction.options.getString("streamername");
+        const streamername = interaction.options.getString("streamer_name");
 
         try {
           const removed = await removeTwitchChannel(streamername);

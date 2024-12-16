@@ -1,20 +1,14 @@
 import { SlashCommandBuilder } from "discord.js";
-import { addSong, getQueue } from "../music/queue.js";
-// import { playSong } from "../music/player.js";
-import { sendMusicControls } from "../music/controls.js";
-// Importiere die erforderlichen Konfigurationen aus der Konfigurationsdatei
-import { exportsConfig } from "../config.js";
-const { GeneralMusicEmoji, GeneralMusicUserFeedbackErrorEmoji } = exportsConfig;
+import { addSong, getQueue } from "../../music/queue.js";
+import { playSong } from "../../music/player.js";
+import { sendMusicControls } from "../../music/controls.js";
 
 export default {
   data: new SlashCommandBuilder()
     .setName("play")
     .setDescription("Spielt einen Song ab.")
     .addStringOption((option) =>
-      option
-        .setName("query")
-        .setDescription("Song oder URL.")
-        .setRequired(true),
+      option.setName("query").setDescription("Song oder URL.").setRequired(true)
     ),
   async execute(interaction) {
     const query = interaction.options.getString("query");
@@ -22,9 +16,7 @@ export default {
     const channel = interaction.channel;
 
     if (!channel) {
-      await interaction.reply(
-        `${GeneralMusicUserFeedbackErrorEmoji} Fehler: Kanal nicht gefunden.`,
-      );
+      await interaction.reply("Fehler: Kanal nicht gefunden.");
       return;
     }
 
@@ -38,7 +30,7 @@ export default {
     // Wenn die Warteschlange leer war, starte die Wiedergabe und sende die Steuerung
     if (guildQueue.songs.length === 1) {
       // Steuerungsnachricht senden
-      await sendMusicControls(channel);
+      await sendMusicControls(channel, guildId);
 
       // Starte die Wiedergabe
       await playSong(guildId);
@@ -46,7 +38,7 @@ export default {
 
     // Rückmeldung an den Benutzer
     await interaction.reply(
-      `${GeneralMusicEmoji} **${query}** wurde zur Warteschlange hinzugefügt!`,
+      `**${query}** wurde zur Warteschlange hinzugefügt!`
     );
   },
 };

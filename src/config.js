@@ -291,6 +291,7 @@ function createDynamicExports(obj, prefix = "") {
   }
 }
 
+// Dynamische Exporte erstellen
 createDynamicExports(config);
 
 // Standard-Export für das Konfigurationsobjekt

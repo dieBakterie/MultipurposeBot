@@ -1,5 +1,24 @@
 -- Purpose: Create the database tables for the Multipurpose Discord bot.
 
+-- Trigger for updating updated_at column
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger for logging discord_channel_name changes
+CREATE OR REPLACE FUNCTION log_channel_name_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO channel_name_changes (old_channel_name, new_channel_name)
+  VALUES (OLD.discord_channel_name, NEW.discord_channel_name);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ====================================
 -- Table: active_setups
 -- ====================================
@@ -64,15 +83,6 @@ COMMENT ON COLUMN rolemenus.updated_at IS 'Zeitpunkt, zu dem der Eintrag zuletzt
 -- Indexes for rolemenus
 CREATE INDEX idx_rolemenus_message_group ON rolemenus (message_id, group_name);
 CREATE INDEX idx_rolemenus_guild_id_group_name ON rolemenus (guild_id, group_name);
-
--- Trigger for rolemenus.updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = CURRENT_TIMESTAMP;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_rolemenus_updated_at
 BEFORE UPDATE ON rolemenus
@@ -154,16 +164,6 @@ BEFORE UPDATE ON twitch_streamers
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
--- Trigger for logging discord_channel_name changes
-CREATE OR REPLACE FUNCTION log_channel_name_changes()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO channel_name_changes (old_channel_name, new_channel_name)
-  VALUES (OLD.discord_channel_name, NEW.discord_channel_name);
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
 CREATE TRIGGER log_twitch_streamers_channel_name_changes
 AFTER UPDATE ON twitch_streamers
 FOR EACH ROW
@@ -208,6 +208,7 @@ BEFORE UPDATE ON youtubers
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
+-- Trigger for logging youtuber discord_channel_name changes
 CREATE TRIGGER log_youtuber_channel_name_changes
 AFTER UPDATE ON youtubers
 FOR EACH ROW

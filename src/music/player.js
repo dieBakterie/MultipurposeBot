@@ -1,98 +1,140 @@
-import pkg from "lavacord";
-const { Node } = pkg;
-import { getQueue } from "./queue.js";
+import { Shoukaku, Connectors } from "shoukaku";
+import { getQueue, deleteQueue } from "./queue.js";
 import { exportsConfig } from "../config.js";
 
 const { lavaLinkHost, lavaLinkPort, lavaLinkPassword } = exportsConfig;
 
-let node; // Lavalink-Node
+// Shoukaku-Instanz erstellen
+const LavalinkNodes = [
+  {
+    name: "MainNode",
+    url: `${lavaLinkHost}:${lavaLinkPort}`,
+    auth: lavaLinkPassword,
+  },
+];
 
-// Verbindung zu Lavalink herstellen
-async function connectNode(client) {
-  node = new Node({
-    userId: client.user.id,
-    shards: 1,
-    host: lavaLinkHost,
-    port: lavaLinkPort,
-    password: lavaLinkPassword,
-  });
+export const shoukaku = new Shoukaku(new Connectors.DiscordJS(), LavalinkNodes, {
+  moveOnDisconnect: false,
+  resume: true,
+  reconnectTries: 5,
+  reconnectInterval: 5000,
+});
 
+// Ereignis-Handler für Shoukaku
+shoukaku.on("ready", (name) =>
+  console.log(`Lavalink Node ${name} ist bereit!`)
+);
+shoukaku.on("error", (name, error) =>
+  console.error(`Lavalink Node ${name} hat einen Fehler:`, error)
+);
+shoukaku.on("close", (name, code, reason) =>
+  console.warn(`Lavalink Node ${name} wurde geschlossen:`, { code, reason })
+);
+shoukaku.on("disconnect", (name, players, moved) =>
+  console.warn(
+    `Lavalink Node ${name} wurde getrennt. Players: ${players.size}. Moved: ${moved}`
+  )
+);
+
+// Verbindung zum Voice-Channel herstellen
+export async function joinChannel(channel) {
   try {
-    await node.connect();
-    console.log("Mit Lavalink verbunden!");
+    const connection = await shoukaku.joinVoiceChannel({
+      guildId: channel.guild.id,
+      channelId: channel.id,
+      deaf: true,
+    });
+    console.log(`Mit Voice-Channel verbunden: ${channel.name}`);
+    return connection;
   } catch (error) {
-    console.error("Fehler bei der Verbindung zu Lavalink:", error.message);
+    console.error(`Fehler beim Verbinden mit Voice-Channel: ${error.message}`);
+  }
+}
+
+// Verbindung zum Voice-Channel trennen
+export async function leaveChannel(guildId) {
+  try {
+    const player = shoukaku.getPlayer(guildId);
+    if (player) {
+      await player.disconnect();
+      console.log("Voice-Channel verlassen.");
+    }
+  } catch (error) {
+    console.error(`Fehler beim Verlassen des Voice-Channels: ${error.message}`);
   }
 }
 
 // Song abspielen
-async function playSong(guildId) {
+export async function playSong(guildId) {
   const queue = getQueue(guildId);
 
   if (!queue || !queue.songs.length) {
-    console.log("Keine Songs in der Warteschlange.");
+    console.warn("Keine Songs in der Warteschlange.");
     return;
   }
 
-  const connection = queue.connection;
-
-  if (!connection) {
+  const player = shoukaku.getPlayer(guildId);
+  if (!player) {
     console.error("Keine aktive Verbindung für die Guild.");
     return;
   }
 
-  const track = queue.songs[0]; // Aktueller Song
+  const track = queue.songs[0];
 
   try {
-    const player = connection.player;
-    await player.play(track.url); // URL oder Audio-Track an Lavalink senden
-    console.log(`Spielt jetzt: ${track.title}`);
-    queue.current = track; // Setze den aktuellen Song
+    const result = await player.node.rest.resolve(track.url);
+    if (!result) {
+      console.error("Song konnte nicht aufgelöst werden.");
+      queue.songs.shift(); // Entferne den fehlerhaften Song
+      await playSong(guildId); // Spiele den nächsten Song
+      return;
+    }
 
-    // Event für Song-Ende
-    player.on("end", async () => {
+    const song = result.tracks[0];
+    player.playTrack(song); // Song abspielen
+    console.log(`Spielt jetzt: ${track.title}`);
+    queue.current = track;
+
+    player.once("end", async () => {
       console.log(`Song beendet: ${track.title}`);
-      queue.songs.shift(); // Entferne den aktuellen Song aus der Warteschlange
+      queue.songs.shift();
       if (queue.songs.length > 0) {
-        await playSong(guildId); // Spiele den nächsten Song
+        await playSong(guildId);
       } else {
         console.log("Warteschlange ist leer.");
         queue.current = null;
       }
     });
 
-    player.on("error", (error) => {
+    player.once("exception", (error) => {
       console.error(`Fehler beim Abspielen: ${error.message}`);
-      queue.songs.shift(); // Entferne den fehlerhaften Song
+      queue.songs.shift();
       if (queue.songs.length > 0) {
-        playSong(guildId); // Spiele den nächsten Song
+        playSong(guildId);
       } else {
         queue.current = null;
       }
     });
   } catch (error) {
     console.error(`Fehler beim Abspielen des Songs: ${error.message}`);
-    queue.songs.shift(); // Entferne den fehlerhaften Song
+    queue.songs.shift();
     if (queue.songs.length > 0) {
-      await playSong(guildId); // Versuche, den nächsten Song abzuspielen
+      await playSong(guildId);
     }
   }
 }
 
 // Song pausieren
-async function pauseSong(guildId) {
-  const queue = getQueue(guildId);
+export async function pauseSong(guildId) {
+  const player = shoukaku.getPlayer(guildId);
 
-  if (!queue || !queue.connection || !queue.connection.player) {
-    console.error(
-      "Keine aktive Verbindung zum Voice-Channel oder kein Song zum Pausieren.",
-    );
+  if (!player) {
+    console.error("Keine aktive Verbindung oder kein Song zum Pausieren.");
     return;
   }
 
   try {
-    const player = queue.connection.player;
-    player.pause(true); // Pausiert die Wiedergabe
+    player.setPaused(true);
     console.log("Wiedergabe pausiert.");
   } catch (error) {
     console.error(`Fehler beim Pausieren des Songs: ${error.message}`);
@@ -100,78 +142,38 @@ async function pauseSong(guildId) {
 }
 
 // Song überspringen
-async function skipSong(guildId) {
+export async function skipSong(guildId) {
   const queue = getQueue(guildId);
 
   if (!queue || !queue.songs.length) {
-    console.log("Keine Songs in der Warteschlange zum Überspringen.");
+    console.warn("Keine Songs in der Warteschlange zum Überspringen.");
     return;
   }
 
-  try {
-    console.log(`Song übersprungen: ${queue.current?.title || "Unbekannt"}`);
-    queue.songs.shift(); // Entferne den aktuellen Song aus der Warteschlange
-
-    if (queue.songs.length > 0) {
-      await playSong(guildId); // Spiele den nächsten Song
-    } else {
-      console.log("Warteschlange ist leer.");
-      queue.current = null;
-    }
-  } catch (error) {
-    console.error(`Fehler beim Überspringen des Songs: ${error.message}`);
+  console.log(`Song übersprungen: ${queue.current?.title || "Unbekannt"}`);
+  queue.songs.shift();
+  if (queue.songs.length > 0) {
+    await playSong(guildId);
+  } else {
+    console.log("Warteschlange ist leer.");
+    queue.current = null;
   }
 }
 
 // Wiedergabe stoppen
-async function stopPlayback(guildId) {
-  const queue = getQueue(guildId);
+export async function stopPlayback(guildId) {
+  const player = shoukaku.getPlayer(guildId);
 
-  if (!queue || !queue.connection || !queue.connection.player) {
-    console.error(
-      "Keine aktive Verbindung zum Voice-Channel oder keine Wiedergabe aktiv.",
-    );
+  if (!player) {
+    console.warn("Keine aktive Verbindung oder keine Wiedergabe aktiv.");
     return;
   }
 
   try {
-    const player = queue.connection.player;
-    player.stop(); // Stoppe die Wiedergabe
-    queue.songs = []; // Leere die Warteschlange
-    queue.current = null;
+    player.stopTrack();
+    deleteQueue(guildId); // Warteschlange komplett löschen
     console.log("Wiedergabe gestoppt und Warteschlange geleert.");
   } catch (error) {
     console.error(`Fehler beim Stoppen der Wiedergabe: ${error.message}`);
   }
 }
-
-// Verbindung zum Voice-Channel herstellen
-async function joinChannel(channel) {
-  const connection = await node.join({
-    guild: channel.guild.id,
-    channel: channel.id,
-    node: node,
-  });
-
-  console.log(`Mit Voice-Channel verbunden: ${channel.name}`);
-  return connection;
-}
-
-// Verbindung zum Voice-Channel trennen
-async function leaveChannel(guildId) {
-  const connection = node.players.get(guildId);
-  if (connection) {
-    await connection.destroy();
-    console.log("Voice-Channel verlassen.");
-  }
-}
-
-export {
-  connectNode,
-  playSong,
-  pauseSong,
-  skipSong,
-  stopPlayback,
-  joinChannel,
-  leaveChannel,
-};

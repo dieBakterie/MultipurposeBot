@@ -1,6 +1,6 @@
 // Importiere die benötigten Module
 import { SlashCommandBuilder } from "discord.js";
-// import { logMessage } from "../../utils/logging.js";
+// import { console.log } from "../../utils/logging.js";
 import { exportsConfig } from "../../config.js";
 const { DiscordUserFeedbackErrorEmoji, DiscordUserFeedbackSuccessEmoji } =
   exportsConfig;
@@ -44,7 +44,7 @@ export default {
 
     // Validierung der Anzahl
     if (num < 1 || num > 100) {
-      /*      logMessage(${DiscordUserFeedbackErrorEmoji} Fehlerhafte Anzahl: ${num}); */
+      /*      console.log(${DiscordUserFeedbackErrorEmoji} Fehlerhafte Anzahl: ${num}); */
       return interaction.reply({
         content: `${DiscordUserFeedbackErrorEmoji} Die Anzahl muss zwischen 1 und 100 liegen.`,
         ephemeral: true,
@@ -55,10 +55,11 @@ export default {
     if (regexPattern) {
       try {
         regex = new RegExp(regexPattern);
-      } catch (err) {
-        /*                 logMessage(
-                    ${DiscordUserFeedbackErrorEmoji} Ungültiges Regex-Muster: ${regexPattern},
-                ); */
+      } catch (error) {
+        console.log(
+          `${DiscordUserFeedbackErrorEmoji} Ungültiges Regex-Muster: ${regexPattern}`,
+          error.message
+        );
         return interaction.reply({
           content: `${DiscordUserFeedbackErrorEmoji} Ungültiges Regex-Muster.`,
           ephemeral: true,
@@ -89,17 +90,17 @@ export default {
       const deleted = await channel.bulkDelete(messagesToDelete, true);
 
       // Erfolgsmeldung
-      /*       logMessage(
-        ${DiscordUserFeedbackSuccessEmoji} Erfolgreich ${deleted.size} Nachrichten gelöscht (Kanal: ${channel.id}).
-      ); */
+      console.log(
+        `${DiscordUserFeedbackSuccessEmoji} Erfolgreich ${deleted.size} Nachrichten gelöscht (Kanal: ${channel.id}).`
+      );
       await interaction.reply({
         content: `${DiscordUserFeedbackSuccessEmoji} Erfolgreich ${deleted.size} Nachrichten gelöscht.`,
         ephemeral: true,
       });
     } catch (error) {
-      /*       logMessage(
-        ${DiscordUserFeedbackErrorEmoji} Fehler beim Löschen: ${error.message}
-      ); */
+      console.log(
+        `${DiscordUserFeedbackErrorEmoji} Fehler beim Löschen: ${error.message}`
+      );
       console.error(
         `${DiscordUserFeedbackErrorEmoji} Fehler beim Löschen der Nachrichten:`,
         error
@@ -109,5 +110,10 @@ export default {
         ephemeral: true,
       });
     }
+
+    return interaction.reply({
+      content: `${DiscordUserFeedbackErrorEmoji} Unbekannter Befehl.`,
+      ephemeral: true,
+    });
   },
 };

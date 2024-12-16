@@ -1,9 +1,9 @@
 import { db } from "./database.js";
-import { searchTwitchChannel } from "../services/twitch.js"; // Funktion, die die Twitch API aufruft
+import { searchTwitchUser } from "../services/twitch.js"; // Funktion, die die Twitch API aufruft
 
 // Utility für Fehlerbehandlung
 function logAndThrowError(message, error) {
-  console.error(`${message}:`, error.message);
+  console.error(`${message}:, error.message`, error);
   throw new Error(message);
 }
 
@@ -20,7 +20,14 @@ export async function addTwitchChannel(
   }
 
   try {
-    const streamers = await searchTwitchChannel(streamername);
+    const streamers = await searchTwitchUser(streamername);
+
+    if (!Array.isArray(streamers)) {
+      throw new Error(
+        `Unerwartetes Format von searchTwitchUser. Erwartet ein Array, erhalten: ${typeof streamers}`
+      );
+    }
+
     const streamer = streamers.find(
       (s) => s.display_name.toLowerCase() === streamername.toLowerCase()
     );
@@ -31,17 +38,15 @@ export async function addTwitchChannel(
 
     const { id: streamerId, display_name: displayName } = streamer;
 
-    const query = `
-      INSERT INTO twitch_streamers (user_name, user_id, discord_channel_id, discord_channel_name, created_at, updated_at)
+    const query = ` 
+      INSERT INTO twitch_streamers (streamer_name, streamer_id, discord_channel_id, discord_channel_name, created_at, updated_at)
       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT (user_name) DO UPDATE SET
-        user_id = EXCLUDED.user_id,
+      ON CONFLICT (streamer_name) DO UPDATE SET
+        streamer_id = EXCLUDED.streamer_id,
         discord_channel_id = COALESCE(EXCLUDED.discord_channel_id, twitch_streamers.discord_channel_id),
-        discord_channel_name = COALESCE(EXCLUDED.discord_channel_name, twitch_streamers.discord_channel_name),
         updated_at = CURRENT_TIMESTAMP;
     `;
-
-    await db.query(query, [
+    const result = await db.query(query, [
       displayName,
       streamerId,
       discordChannelId,
@@ -50,11 +55,12 @@ export async function addTwitchChannel(
 
     return {
       success: true,
+      data: result.rows[0],
       message: `Streamer "${displayName}" erfolgreich hinzugefügt.`,
     };
   } catch (error) {
     logAndThrowError(
-      `Fehler beim Hinzufügen des Streamers "${streamername}"`,
+      `${TwitchUserFeedbackErrorEmoji} Fehler beim Hinzufügen des Streamers "${streamername}"`,
       error
     );
   }
@@ -76,10 +82,9 @@ export async function setDiscordChannelForStreamer(
     const query = `
       UPDATE twitch_streamers
       SET discord_channel_id = $1, discord_channel_name = $2, updated_at = CURRENT_TIMESTAMP
-      WHERE user_name = $3
+      WHERE streamer_name = $3
       RETURNING *;
     `;
-
     const result = await db.query(query, [
       discordChannelId,
       discordChannelName,
@@ -93,31 +98,16 @@ export async function setDiscordChannelForStreamer(
       };
     }
 
-    return { success: true, data: result.rows[0], message: `Kanal geändert.` };
+    return {
+      success: true,
+      data: result.rows[0],
+      message: `Discord-Kanal für "${streamername}" geändert: ${discordChannelName} (${discordChannelId})`,
+    };
   } catch (error) {
     logAndThrowError(
-      `Fehler beim Setzen des Discord-Kanals für "${streamername}"`,
+      `${TwitchUserFeedbackErrorEmoji} Fehler beim Setzen des Discord-Kanals für "${streamername}"`,
       error
     );
-  }
-}
-
-/**
- * Ruft einen Streamer anhand eines Feldes ab.
- */
-export async function getTwitchChannelByField(field, value) {
-  try {
-    const query = `
-      SELECT * FROM twitch_streamers
-      WHERE ${field} = $1;
-    `;
-    const result = await db.query(query, [value]);
-
-    if (result.rowCount === 0) return null;
-
-    return result.rows[0];
-  } catch (error) {
-    logAndThrowError("Fehler beim Abrufen des Streamers", error);
   }
 }
 
@@ -125,7 +115,7 @@ export async function getTwitchChannelByField(field, value) {
  * Ruft den Discord-Kanal für einen Streamer ab.
  */
 export async function getDiscordChannelForStreamer(streamername) {
-  const streamer = await getTwitchChannelByField("user_name", streamername);
+  const streamer = await getTwitchChannelByField("streamer_name", streamername);
   return streamer ? streamer.discord_channel_id : null;
 }
 
@@ -134,9 +124,9 @@ export async function getDiscordChannelForStreamer(streamername) {
  */
 export async function removeTwitchChannel(streamername) {
   try {
-    const query = `
+    const query = ` 
       DELETE FROM twitch_streamers
-      WHERE user_name = $1;
+      WHERE streamer_name = $1;
     `;
     const result = await db.query(query, [streamername]);
 
@@ -153,7 +143,7 @@ export async function removeTwitchChannel(streamername) {
     };
   } catch (error) {
     logAndThrowError(
-      `Fehler beim Entfernen des Streamers "${streamername}"`,
+      `${TwitchUserFeedbackErrorEmoji} Fehler beim Entfernen des Streamers "${streamername}"`,
       error
     );
   }
@@ -164,10 +154,10 @@ export async function removeTwitchChannel(streamername) {
  */
 export async function getTrackedTwitchChannels() {
   try {
-    const query = `
-      SELECT user_name, discord_channel_name, discord_channel_id, created_at, updated_at
+    const query = ` 
+      SELECT streamer_name, discord_channel_name, discord_channel_id, created_at, updated_at
       FROM twitch_streamers
-      ORDER BY user_name;
+      ORDER BY streamer_name;
     `;
     const result = await db.query(query);
 
@@ -177,6 +167,9 @@ export async function getTrackedTwitchChannels() {
 
     return result.rows;
   } catch (error) {
-    logAndThrowError("Fehler beim Abrufen der überwachten Streamer", error);
+    logAndThrowError(
+      `${TwitchUserFeedbackErrorEmoji} Fehler beim Abrufen der überwachten Streamer`,
+      error
+    );
   }
 }

@@ -1,5 +1,6 @@
+/// sollte der bot abstürzen oder neugestartet werden, wird das setup wiederhergestellt
 const activeSetups = new Map(); // Map für aktive Setups
-const SETUP_TIMEOUT = 60 * 60 * 1000; // 10 Minuten Timeout für Setups
+const SETUP_TIMEOUT = 10 * 60 * 1000; // 10 Minuten Timeout für Setups
 
 // Funktion: Rolemenus wiederherstellen
 export async function restoreRolemenus(client, db) {

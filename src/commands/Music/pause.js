@@ -1,8 +1,8 @@
 // Importiere die erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
-import { getQueue } from "../music/queue.js";
+import { shoukaku } from "../../music/player.js";
+import { exportsConfig } from "../../config.js";
 // Importiere die erforderlichen Konfigurationen aus der Konfigurationsdatei
-import { exportsConfig } from "../config.js";
 const {
   GeneralMusicControlsPauseEmoji,
   GeneralMusicUserFeedbackErrorEmoji,
@@ -16,34 +16,36 @@ export default {
   async execute(interaction) {
     const guildId = interaction.guild.id;
 
-    // Hole die Warteschlange für die aktuelle Guild
-    const queue = getQueue(guildId);
+    // Hole die Shoukaku-Player-Instanz
+    const player = shoukaku.getPlayer(guildId);
 
-    // Überprüfe, ob Musik abgespielt wird
-    if (!queue || !queue.current) {
+    // Überprüfe, ob ein Player existiert
+    if (!player) {
       return interaction.reply({
         content: `${GeneralMusicUserFeedbackInfoEmoji} Es wird aktuell keine Musik abgespielt.`,
         ephemeral: true,
       });
     }
 
-    // Überprüfe, ob eine Verbindung existiert
-    if (!queue.connection || !queue.connection.player) {
+    // Überprüfe, ob der Player aktiv ist
+    if (!player.track) {
       return interaction.reply({
-        content: `${GeneralMusicUserFeedbackInfoEmoji} Keine aktive Verbindung zum Voice-Channel.`,
+        content: `${GeneralMusicUserFeedbackInfoEmoji} Es wird aktuell keine Musik abgespielt.`,
         ephemeral: true,
       });
     }
 
-    // Pausiere die Wiedergabe
     try {
-      queue.connection.player.pause();
+      // Pausiere den Player
+      player.setPaused(true);
+
+      // Antwort an den Nutzer
       await interaction.reply(
-        `${GeneralMusicControlsPauseEmoji} Wiedergabe wurde pausiert.`,
+        `${GeneralMusicControlsPauseEmoji} Wiedergabe wurde pausiert.`
       );
     } catch (error) {
       console.error(
-        `${GeneralMusicUserFeedbackErrorEmoji} Fehler beim Pausieren der Wiedergabe: ${error.message}`,
+        `${GeneralMusicUserFeedbackErrorEmoji} Fehler beim Pausieren der Wiedergabe: ${error.message}`
       );
       await interaction.reply({
         content: `${GeneralMusicUserFeedbackErrorEmoji} Fehler beim Pausieren der Wiedergabe.`,

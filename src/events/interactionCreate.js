@@ -1,83 +1,107 @@
+import { handleMusicControl } from "../music/interactionMusicControls.js";
+import { handleRoleMenuControl } from "../rolemenu/interactionRoleMenuControls.js"; // Neue Datei für Rollensteuerung
 import { getTrackedTwitchChannels } from "../database/twitchDatabase.js";
+import {
+  fetchAllRoleMenus,
+  fetchRoleMenuRoles,
+} from "../database/rolemenuDatabase.js";
 
 export default {
   name: "interactionCreate",
   async execute(interaction) {
-    if (interaction.isAutocomplete()) {
-      const focusedOption = interaction.options.getFocused(true);
-
-      // Autocomplete für Twitch-Streamer
-      if (
-        interaction.commandName === "twitch" &&
-        focusedOption.name === "username"
-      ) {
-        const streamers = await getTrackedTwitchChannels();
-        const choices = streamers.filter((streamer) =>
-          streamer.toLowerCase().includes(focusedOption.value.toLowerCase())
-        );
-        return interaction.respond(
-          choices.map((choice) => ({ name: choice, value: choice }))
-        );
+    try {
+      // **Button-Interaktionen**
+      if (interaction.isButton()) {
+        // Musiksteuerung
+        if (interaction.customId.startsWith("music_")) {
+          await handleMusicControl(interaction);
+        }
+        // Rollensteuerung
+        else if (interaction.customId.startsWith("role_")) {
+          await handleRoleMenuControl(interaction);
+        }
+        return;
       }
 
-      // Autocomplete für Rollen
-      if (interaction.commandName === "rolemenu") {
-        const subcommand = interaction.options.getSubcommand();
+      // **Autocomplete-Interaktionen**
+      if (interaction.isAutocomplete()) {
+        const focusedOption = interaction.options.getFocused(true);
 
-        if (subcommand === "edit") {
-          if (focusedOption.name === "message_id") {
-            // Vorschläge für Rolemenu-IDs
-            const roleMenus = await fetchAllRoleMenus(interaction.guild.id);
-            await interaction.respond(
-              roleMenus.map((menu) => ({
-                name: `Gruppe: ${menu.group_name}, ID: ${menu.message_id}`,
-                value: menu.message_id,
-              }))
-            );
-          } else if (focusedOption.name === "emoji") {
-            // Vorschläge für Emojis eines Rolemenus
-            const messageId = interaction.options.getString("message_id");
-            if (!messageId) {
-              return interaction.respond([]);
+        // Autocomplete für Twitch-Streamer
+        if (
+          interaction.commandName === "twitch" &&
+          focusedOption.name === "streamer_name"
+        ) {
+          const streamers = await getTrackedTwitchChannels();
+          const choices = streamers.filter((streamer) =>
+            streamer.toLowerCase().includes(focusedOption.value.toLowerCase())
+          );
+          return interaction.respond(
+            choices.map((choice) => ({ name: choice, value: choice }))
+          );
+        }
+
+        // Autocomplete für Rollen im RoleMenu
+        if (interaction.commandName === "rolemenu") {
+          const subcommand = interaction.options.getSubcommand();
+
+          if (subcommand === "edit") {
+            if (focusedOption.name === "message_id") {
+              const roleMenus = await fetchAllRoleMenus(interaction.guild.id);
+              return interaction.respond(
+                roleMenus.map((menu) => ({
+                  name: `Gruppe: ${menu.group_name}, ID: ${menu.message_id}`,
+                  value: menu.message_id,
+                }))
+              );
+            } else if (focusedOption.name === "emoji") {
+              const messageId = interaction.options.getString("message_id");
+              if (!messageId) return interaction.respond([]);
+              const roles = await fetchRoleMenuRoles(messageId);
+              return interaction.respond(
+                roles.map((role) => ({
+                  name: `Emoji: ${role.emoji} → Rolle: ${role.role_name}`,
+                  value: role.emoji,
+                }))
+              );
+            } else if (focusedOption.name === "role") {
+              const guildRoles = interaction.guild.roles.cache.filter((role) =>
+                role.name
+                  .toLowerCase()
+                  .includes(focusedOption.value.toLowerCase())
+              );
+              const choices = guildRoles.map((role) => ({
+                name: role.name,
+                value: role.id,
+              }));
+              return interaction.respond(choices);
             }
-            const roles = await fetchRoleMenuRoles(messageId);
-            await interaction.respond(
-              roles.map((role) => ({
-                name: `Emoji: ${role.emoji} → Rolle: ${role.role_name}`,
-                value: role.emoji,
-              }))
-            );
-          } else if (focusedOption.name === "role") {
-            // Vorschläge für Rollen
-            const guildRoles = interaction.guild.roles.cache.filter((role) =>
-              role.name.toLowerCase().includes(focusedOption.value.toLowerCase())
-            );
-
-            const choices = guildRoles.map((role) => ({
-              name: role.name,
-              value: role.id,
-            }));
-
-            await interaction.respond(choices);
           }
         }
       }
-    }
 
-    if (!interaction.isCommand()) return;
+      // **Slash-Commands**
+      if (interaction.isCommand()) {
+        const command = interaction.client.commands.get(
+          interaction.commandName
+        );
+        if (!command) return;
 
-    // Slash Command ausführen
-    const command = interaction.client.commands.get(interaction.commandName);
-    if (!command) return;
-
-    try {
-      await command.execute(interaction);
+        await command.execute(interaction);
+      }
     } catch (error) {
-      console.error("Fehler beim Ausführen des Befehls:", error);
-      await interaction.reply({
-        content: "Es gab ein Problem beim Ausführen des Befehls.",
-        ephemeral: true,
-      });
+      console.error("Fehler bei der Interaktion:", error);
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({
+          content: "Ein Fehler ist aufgetreten.",
+          ephemeral: true,
+        });
+      } else {
+        await interaction.reply({
+          content: "Ein Fehler ist aufgetreten.",
+          ephemeral: true,
+        });
+      }
     }
   },
 };

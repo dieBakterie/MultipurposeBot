@@ -1,3 +1,4 @@
+// src/utils/apiManager.js
 import axios from "axios";
 
 export default class APIManager {

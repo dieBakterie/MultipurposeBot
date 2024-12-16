@@ -10,7 +10,7 @@ import {
   addActiveSetup,
   addRoleMenuRole,
   removeActiveSetup,
-} from "../../database/rolemenuDatabase.js";
+} from "../../database/.js";
 
 const activeSetups = new Map();
 const SETUP_TIMEOUT = 10 * 60 * 1000;

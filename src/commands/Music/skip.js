@@ -1,9 +1,9 @@
 // Importiere alle erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
-import { getQueue, skipSong } from "../music/queue.js";
+import { getQueue, skipSong } from "../../music/queue.js";
 // import { playSong } from "../music/player.js";
 // Importiere alle erforderlichen Konfigurationsobjekte
-import { exportsConfig } from "../config.js";
+import { exportsConfig } from "../../config.js";
 const { GeneralMusicUserFeedbackInfoEmoji,
   GeneralMusicControlsSkipEmoji,
   GeneralMusicUserFeedbackErrorEmoji,

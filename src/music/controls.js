@@ -1,7 +1,7 @@
 // Importiere die erforderlichen Module
-import MessageEmbed from "discord.js";
-// Importiere die erforderlichen Konfigurationsobjekte
+import { MessageEmbed } from "discord.js";
 import { exportsConfig } from "../config.js";
+// Importiere die erforderlichen Konfigurationsobjekte
 const {
   MusicEmoji,
   MusicControlsPlayPause,
@@ -10,7 +10,7 @@ const {
   MusicControlsStop,
 } = exportsConfig;
 
-/*
+/**
  * Erstellt und sendet die Steuerungsnachricht
  * @param {TextChannel} channel - Der Discord-Kanal, in dem die Nachricht gesendet wird
  * @param {Object} queue - Die aktuelle Musikwarteschlange
@@ -27,7 +27,7 @@ export async function sendMusicControls(channel, queue) {
         `**Aktueller Song:** ${
           queue.current ? queue.current.title : "Kein Song"
         }\n` +
-        `**Warteschlange:** ${queue.songs.length} Songs`,
+        `**Warteschlange:** ${queue.songs.length} Songs`
     )
     .setColor("BLUE");
 
@@ -46,7 +46,7 @@ export async function sendMusicControls(channel, queue) {
   return controlMessage;
 }
 
-/*
+/**
  * Aktualisiert die Steuerungsnachricht
  * @param {Message} message - Die Steuerungsnachricht, die aktualisiert werden soll
  * @param {Object} queue - Die aktuelle Musikwarteschlange
@@ -62,7 +62,7 @@ export async function updateMusicControls(message, queue) {
         `**Aktueller Song:** ${
           queue.current ? queue.current.title : "Kein Song"
         }\n` +
-        `**Warteschlange:** ${queue.songs.length} Songs`,
+        `**Warteschlange:** ${queue.songs.length} Songs`
     )
     .setColor("BLUE");
 

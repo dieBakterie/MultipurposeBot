@@ -1,4 +1,4 @@
-import { getTwitchStreamDetails } from "../services/twitch.js";
+// import { getTwitchStreamDetails } from "../services/twitch.js";
 import { getTrackedTwitchChannels } from "../database/twitchDatabase.js";
 
 const streamStatus = {}; // Status der Streamer

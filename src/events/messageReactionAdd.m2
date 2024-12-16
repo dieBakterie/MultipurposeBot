@@ -1,12 +1,12 @@
 // Importiere alle erforderlichen Module
-/* import {
+import {
   playSong,
   pauseSong,
   skipSong,
   stopPlayback,
-} from "../music/player.js"; */
-// Importiere alle erforderlichen Konfigurationsobjekte
+} from "../music/player.js";
 import { exportsConfig } from "../config.js";
+// Importiere alle erforderlichen Konfigurationsobjekte
 const {
   musicEmoji,
   musicControlsPlayPauseEmoji,

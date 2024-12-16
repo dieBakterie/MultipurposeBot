@@ -1,6 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
 import { exportsConfig } from "../../config.js";
-
 const { DiscordUserFeedbackErrorEmoji, DiscordUserFeedbackSuccessEmoji } =
   exportsConfig;
 

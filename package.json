@@ -6,18 +6,18 @@
   "scripts": {
     "start": "clear && git add . && node ./src/index.js",
     "config": "clear && git add . && node ./src/config.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "clear && git add . && node ./src/test.js"
   },
   "keywords": [],
   "author": "derDelphin",
   "license": "ISC",
-  "description": "A multipurpose bot for Discord",
+  "description": "A Multipurpose bot for Discord",
   "dependencies": {
-    "@discordjs/voice": "^0.18.0",
     "axios": "^1.7.9",
     "discord.js": "^14.16.3",
     "dotenv-safe": "^9.1.0",
     "pg": "^8.13.1",
+    "shoukaku": "github:shipgirlproject/Shoukaku#master",
     "winston": "^3.17.0"
   }
 }

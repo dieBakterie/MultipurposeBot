@@ -7,16 +7,16 @@ import {
   getTrackedYouTubeChannels,
   setDiscordChannelForYouTubeChannel,
 } from "../../database/youtubeDatabase.js";
+import { exportsConfig } from "../../config.js";
 
 // Importiere die erforderlichen Konfigurationen
-import { exportsConfig } from "../../config.js";
 const {
   YouTubeNotificationUserFeedbackErrorEmoji,
   YouTubeNotificationUserFeedbackSuccessEmoji,
   YouTubeNotificationUserFeedbackInfoEmoji,
   YouTubeNotificationUserFeedbackListEmoji,
   YouTubeMusicUserFeedbackErrorEmoji,
-  YouTubeMusicUserFeedbackLinkEmoji
+  YouTubeMusicUserFeedbackLinkEmoji,
 } = exportsConfig;
 
 export default {
@@ -33,9 +33,14 @@ export default {
             .setDescription("Füge einen YouTube-Kanal zur Überwachung hinzu.")
             .addStringOption((option) =>
               option
+                .setName("channelName")
+                .setDescription("Der Name des YouTube-Kanals.")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
                 .setName("channelid")
                 .setDescription("Die ID des YouTube-Kanals.")
-                .setRequired(true)
             )
             .addChannelOption((option) =>
               option
@@ -59,11 +64,6 @@ export default {
         )
         .addSubcommand((sub) =>
           sub
-            .setName("list")
-            .setDescription("Zeige die Liste der überwachten YouTube-Kanäle.")
-        )
-        .addSubcommand((sub) =>
-          sub
             .setName("set-channel")
             .setDescription(
               "Ändere den Discord-Kanal für Benachrichtigungen eines YouTube-Kanals."
@@ -73,6 +73,14 @@ export default {
                 .setName("channelid")
                 .setDescription("Die ID des YouTube-Kanals.")
                 .setRequired(true)
+                .setAutocomplete(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("channelName")
+                .setDescription("Der Name des YouTube-Kanals.")
+                .setRequired(true)
+                .setAutocomplete(true)
             )
             .addChannelOption((option) =>
               option
@@ -83,6 +91,11 @@ export default {
                 .setRequired(true)
             )
         )
+        .addSubcommand((sub) =>
+          sub
+            .setName("list")
+            .setDescription("Zeige die Liste der überwachten YouTube-Kanäle.")
+        )
     ),
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -90,6 +103,7 @@ export default {
 
     if (group === "notify") {
       const channelId = interaction.options.getString("channelid", false);
+      const channelName = interaction.options.getString("channelName", false);
 
       if (subcommand === "add") {
         const notificationChannel = interaction.options.getChannel(
@@ -107,14 +121,14 @@ export default {
 
           await addYouTubeChannel(
             channelId,
-            channelName, // Hier kannst du optional einen Kanalnamen integrieren
+            channelName,
             latestVideos[0].id,
             notificationChannel.id,
             notificationChannel.name
           );
 
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackSuccessEmoji} Der YouTube-Kanal **${channelId}** wird jetzt überwacht. Benachrichtigungen werden an <#${notificationChannel.id}> gesendet.`,
+            content: `${YouTubeNotificationUserFeedbackSuccessEmoji} Der YouTube-Kanal **${channelName}**(Kanal-ID: **${channelId}**) wird jetzt überwacht. Benachrichtigungen werden an <#${notificationChannel.id}> gesendet.`,
             ephemeral: true,
           });
         } catch (error) {
@@ -128,7 +142,7 @@ export default {
 
       if (subcommand === "remove") {
         try {
-          const removed = await removeYouTubeChannel(channelId);
+          const removed = await removeYouTubeChannel(channelName || channelId);
           if (!removed) {
             return interaction.reply({
               content: `${YouTubeNotificationUserFeedbackInfoEmoji} Dieser Kanal wird nicht überwacht.`,
@@ -224,7 +238,7 @@ export default {
         } catch (error) {
           console.error(error);
           return interaction.reply(
-            `${YouTubeMusicUserFeedbackErrorEmoji} Fehler beim Abrufen der YouTube-Musik.`
+            `${YouTubeMusicUserFeedbackErrorEmoji}, "Fehler beim Abrufen der YouTube-Musik.`
           );
         }
       }
