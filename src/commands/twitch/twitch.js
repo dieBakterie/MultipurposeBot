@@ -1,3 +1,4 @@
+// src/commands/Twitch/twitch.js
 import { SlashCommandBuilder, ChannelType } from "discord.js";
 import {
   addTwitchChannel,
@@ -5,15 +6,13 @@ import {
   getTrackedTwitchChannels,
   setDiscordChannelForStreamer,
 } from "../../database/twitchDatabase.js";
-import { searchTwitchUser } from "../../services/twitch.js";
-import { exportsConfig } from "../../config.js";
-
-const {
-  TwitchUserFeedbackErrorEmoji,
-  TwitchUserFeedbackSuccessEmoji,
-  TwitchUserFeedbackInfoEmoji,
-  TwitchUserFeedbackListEmoji,
-} = exportsConfig;
+import { searchStreamer } from "../../services/Twitch/twitch.js";
+import {
+  twitchFeedbackError,
+  twitchFeedbackSuccess,
+  twitchFeedbackInfo,
+  twitchFeedbackList,
+} from "../../alias.js";
 
 export default {
   data: new SlashCommandBuilder()
@@ -25,18 +24,18 @@ export default {
         .setDescription("Füge einen Twitch-Streamer hinzu.")
         .addStringOption((option) =>
           option
-            .setName("streamer_name")
+            .setName("user_name")
             .setDescription("Der Twitch-Username des Streamers.")
-            .setAutocomplete(true)
             .setRequired(true)
+            .setAutocomplete(true)
         )
         .addChannelOption((option) =>
           option
-            .setName("channel_id")
+            .setName("channel_name")
             .setDescription(
-              "Die Discord-Channel-ID für Live-Benachrichtigungen."
+              `${twitchFeedbackInfo.emoji} Der Discord-Kanal für Live-Benachrichtigungen. Falls nicht angegeben, wird der aktuelle Kanal verwendet.`
             )
-            .setRequired(true)
+            .addChannelTypes(ChannelType.GuildText)
         )
     )
     .addSubcommand((subcommand) =>
@@ -45,10 +44,10 @@ export default {
         .setDescription("Entferne einen Twitch-Streamer.")
         .addStringOption((option) =>
           option
-            .setName("streamer_name")
+            .setName("user_name")
             .setDescription("Der Twitch-Username des Streamers.")
-            .setAutocomplete(true)
             .setRequired(true)
+            .setAutocomplete(true)
         )
     )
     .addSubcommand((subcommand) =>
@@ -57,16 +56,17 @@ export default {
         .setDescription("Ändere den Discord-Kanal eines Streamers.")
         .addStringOption((option) =>
           option
-            .setName("streamer_name")
+            .setName("user_name")
             .setDescription("Der Twitch-Username des Streamers.")
-            .setAutocomplete(true)
             .setRequired(true)
+            .setAutocomplete(true)
         )
         .addChannelOption((option) =>
           option
             .setName("channel_id")
-            .setDescription("Der neue Discord-Channel.")
+            .setDescription("Der neue Discord-Kanal.")
             .setRequired(true)
+            .addChannelTypes(ChannelType.GuildText)
         )
     )
     .addSubcommand((subcommand) =>
@@ -77,102 +77,119 @@ export default {
 
     switch (subcommand) {
       case "add": {
-        const streamername = interaction.options.getString("streamer_name");
-        const channel = interaction.options.getChannel("channel_id");
+        const streamerName = interaction.options.getString("user_name");
+        const channel =
+          interaction.options.getChannel("channel_name") || interaction.channel;
 
-        if (!channel || channel.type !== ChannelType.GuildText) {
+        // Überprüfung: Ist der Kanal gültig?
+        if (!channel || !channel.isTextBased()) {
           return interaction.reply({
-            content: `${TwitchUserFeedbackErrorEmoji} Der Kanal <#${channel?.id}> ist ungültig oder kein Textkanal.`,
+            content: `${twitchFeedbackError.emoji} Der Kanal **${
+              channel?.toString() || "unbekannt"
+            }** ist ungültig.`,
             ephemeral: true,
           });
         }
 
         try {
-          const streamDetails = await searchTwitchUser(streamername);
+          // Twitch-Streamer-Details abrufen
+          const streamerDetails = await searchStreamer(streamerName);
 
-          if (!streamDetails) {
+          if (!streamerDetails) {
             return interaction.reply({
-              content: `${TwitchUserFeedbackInfoEmoji} Der Streamer **${streamername}** wurde nicht gefunden.`,
+              content: `${twitchFeedbackInfo.emoji} Der Streamer **${streamerName}** wurde nicht gefunden.`,
               ephemeral: true,
             });
           }
 
-          // Speichere sowohl die Kanal-ID als auch den Kanalnamen
+          // Streamer und Kanal-ID in der Datenbank speichern
           const result = await addTwitchChannel(
-            streamername,
-            channel.name, // Channel-Name
-            channel.id // Channel-ID
+            streamerDetails.display_name,
+            channel.id
           );
 
-          return interaction.reply({
-            content: `${TwitchUserFeedbackSuccessEmoji} Der Streamer **${streamername}** wurde erfolgreich hinzugefügt und Benachrichtigungen werden an **${channel.name}** (<#${channel.id}>) gesendet.`,
-            ephemeral: false,
-          });
+          // Erfolgsmeldung
+          if (result.success) {
+            return interaction.reply({
+              content: `${twitchFeedbackSuccess.emoji} ${
+                result.message
+              } Benachrichtigungen werden an ${channel.toString()} gesendet.`,
+              ephemeral: true,
+            });
+          } else {
+            return interaction.reply({
+              content: `${twitchFeedbackError.emoji} Fehler beim Hinzufügen des Streamers "${streamerName}".`,
+              ephemeral: true,
+            });
+          }
         } catch (error) {
           console.error(
             "Fehler beim Hinzufügen des Streamers:",
             error.stack || error
           );
           return interaction.reply({
-            content: `${TwitchUserFeedbackErrorEmoji} Fehler beim Hinzufügen des Streamers.`,
+            content: `${twitchFeedbackError.emoji} Fehler beim Hinzufügen des Streamers.`,
             ephemeral: true,
           });
         }
       }
 
       case "set-channel": {
-        const streamername = interaction.options.getString("streamer_name");
+        const streamerName = interaction.options.getString("user_name");
         const channel = interaction.options.getChannel("channel_id");
 
-        if (!channel || channel.type !== ChannelType.GuildText) {
+        if (!channel) {
           return interaction.reply({
-            content: `${TwitchUserFeedbackErrorEmoji} Der Kanal <#${channel?.id}> ist ungültig oder kein Textkanal.`,
+            content: `${
+              twitchFeedbackError.emoji
+            } Der Kanal **${channel?.ToString()}** ist ungültig.`,
             ephemeral: true,
           });
         }
 
         try {
           const result = await setDiscordChannelForStreamer(
-            streamername,
-            channel.name, // Channel-Name
-            channel.id // Channel-ID
+            streamerName,
+            channel
           );
 
           if (!result.success) {
             return interaction.reply({
-              content: `${TwitchUserFeedbackInfoEmoji} Der Streamer **${streamername}** wurde nicht gefunden.`,
+              content: `${twitchFeedbackInfo.emoji} Der Streamer **${streamerName}** wurde nicht gefunden.`,
               ephemeral: true,
             });
           }
 
           return interaction.reply({
-            content: `${TwitchUserFeedbackSuccessEmoji} Der Discord-Kanal für **${streamername}** wurde erfolgreich auf **${channel.name}** (<#${channel.id}>) geändert.`,
+            content: `${
+              twitchFeedbackSuccess.emoji
+            } Der Discord-Kanal für **${streamerName}** wurde erfolgreich auf **${channel.ToString()}** (${channel}) geändert.`,
             ephemeral: false,
           });
         } catch (error) {
           console.error("Fehler beim Ändern des Kanals:", error.stack || error);
           return interaction.reply({
-            content: `${TwitchUserFeedbackErrorEmoji} Fehler beim Ändern des Kanals.`,
+            content: `${twitchFeedbackError.emoji} Fehler beim Ändern des Kanals.`,
             ephemeral: true,
           });
         }
       }
 
       case "remove": {
-        const streamername = interaction.options.getString("streamer_name");
+        const streamerName = interaction.options.getString("user_name");
 
         try {
-          const removed = await removeTwitchChannel(streamername);
+          const removed = await removeTwitchChannel(streamerName);
 
           if (!removed) {
             return interaction.reply({
-              content: `${TwitchUserFeedbackInfoEmoji} Der Streamer **${streamername}** wurde nicht gefunden.`,
+              content: `${twitchFeedbackInfo.emoji} Der Streamer **${streamerName}** wurde nicht gefunden.`,
               ephemeral: true,
             });
           }
 
           return interaction.reply(
-            `${TwitchUserFeedbackSuccessEmoji} Der Streamer **${streamername}** wurde erfolgreich entfernt.`
+            `${twitchFeedbackSuccess.emoji} Der Streamer **${streamerName}** wurde erfolgreich entfernt.`
           );
         } catch (error) {
           console.error(
@@ -180,7 +197,7 @@ export default {
             error.stack || error
           );
           return interaction.reply({
-            content: `${TwitchUserFeedbackErrorEmoji} Fehler beim Entfernen des Streamers.`,
+            content: `${twitchFeedbackError.emoji} Fehler beim Entfernen des Streamers.`,
             ephemeral: true,
           });
         }
@@ -192,16 +209,18 @@ export default {
 
           if (streamerList.length === 0) {
             return interaction.reply({
-              content: `${TwitchUserFeedbackInfoEmoji} Es sind keine Streamer gespeichert.`,
+              content: `${twitchFeedbackInfo.emoji} Es sind keine Streamer gespeichert.`,
               ephemeral: true,
             });
           }
 
           return interaction.reply(
-            `${TwitchUserFeedbackListEmoji} Liste der Twitch-Streamer:\n${streamerList
+            `${
+              twitchFeedbackList.emoji
+            } Liste der Twitch-Streamer:\n${streamerList
               .map(
                 (streamer) =>
-                  `- **${streamer.streamername}** (Kanal: ${
+                  `- **${streamer.streamerName}** (Kanal: ${
                     streamer.discordChannelId
                       ? `<#${streamer.discordChannelId}>`
                       : "Kein Kanal"
@@ -211,11 +230,11 @@ export default {
           );
         } catch (error) {
           console.error(
-            `${TwitchUserFeedbackErrorEmoji} Fehler beim Abrufen der Streamer-Liste:`,
+            `${twitchFeedbackError.emoji} Fehler beim Abrufen der Streamer-Liste:`,
             error
           );
           return interaction.reply({
-            content: `${TwitchUserFeedbackErrorEmoji} Fehler beim Abrufen der Streamer-Liste.`,
+            content: `${twitchFeedbackError.emoji} Fehler beim Abrufen der Streamer-Liste.`,
             ephemeral: true,
           });
         }
@@ -223,7 +242,7 @@ export default {
 
       default:
         return interaction.reply({
-          content: `${TwitchUserFeedbackErrorEmoji} Unbekannter Befehl.`,
+          content: `${twitchFeedbackError.emoji} Unbekannter Befehl.`,
           ephemeral: true,
         });
     }

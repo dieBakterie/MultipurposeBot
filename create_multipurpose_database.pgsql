@@ -1,3 +1,4 @@
+-- create_multipurpose_database.pgsql
 -- Purpose: Create the database for the Multipurpose Discord bot.
 
 -- Database: multipurpose

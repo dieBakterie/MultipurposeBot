@@ -1,0 +1,75 @@
+# docker-compose.yaml
+version: '3.9'
+
+services:
+  multipurpose-bot:
+    container_name: multipurpose-bot
+    image: node:current-alpine3.21
+    working_dir: /usr/src/app
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules  # Verhindert das Überschreiben von node_modules
+    command: >
+      sh -c "
+      if [ ! -d 'node_modules' ]; then
+        npm install;
+      fi &&
+      npm run start"
+    env_file:
+      - .env
+    environment:
+      - DOCKER_ENVIRONMENT=true
+      - LAVALINK_HOST=lavaLink
+      - DATABASE_HOST=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+      lavaLink:
+        condition: service_started
+    networks:
+      - multipurpose-network
+    restart: unless-stopped
+
+  lavaLink:
+    container_name: lavaLink
+    image: fredboat/lavalink:latest-alpine
+    environment:
+      LAVALINK_PORT: ${LAVALINK_PORT}
+      LAVALINK_HOST: ${LAVALINK_HOST}
+      LAVALINK_PASSWORD: ${LAVALINK_PASSWORD}
+    volumes:
+      - ./lavaLink/application.yml:/app/application.yml
+    # ports:
+    #   - "${LAVALINK_PORT}:${LAVALINK_PORT}" # Exponiere den Port nur, wenn nötig
+    networks:
+      - multipurpose-network
+    restart: unless-stopped
+
+  postgres:
+    container_name: postgres
+    image: postgres:17.2-alpine3.21
+    environment:
+      POSTGRES_HOST: ${DATABASE_HOST} # Überschreibt den Host nur für Docker
+      POSTGRES_USER: ${DATABASE_USER} # Aus .env
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD} # Aus .env
+      POSTGRES_DB: ${DATABASE_NAME} # Aus .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/init.pgsql:/docker-entrypoint-initdb.d/init.sql
+    # ports:
+    #   - "${DB_PORT}:${DB_PORT}" # Exponiere den Port nur, wenn nötig
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - multipurpose-network
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  multipurpose-network:
+    driver: bridge

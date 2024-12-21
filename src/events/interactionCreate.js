@@ -1,5 +1,6 @@
-import { handleMusicControl } from "../music/interactionMusicControls.js";
-import { handleRoleMenuControl } from "../rolemenu/interactionRoleMenuControls.js"; // Neue Datei für Rollensteuerung
+// src/events/interactionCreate.js
+import { handleMusicControl } from "../services/music/interactionMusicControls.js";
+import { handleRoleMenuControl } from "../services/rolemenu/interactionRoleMenuControls.js";
 import { getTrackedTwitchChannels } from "../database/twitchDatabase.js";
 import {
   fetchAllRoleMenus,
@@ -13,11 +14,10 @@ export default {
       // **Button-Interaktionen**
       if (interaction.isButton()) {
         // Musiksteuerung
-        if (interaction.customId.startsWith("music_")) {
+        if (["play_pause", "skip", "stop"].includes(interaction.customId)) {
           await handleMusicControl(interaction);
-        }
-        // Rollensteuerung
-        else if (interaction.customId.startsWith("role_")) {
+        } else if (interaction.customId.startsWith("role_")) {
+          // Rollensteuerung
           await handleRoleMenuControl(interaction);
         }
         return;
@@ -30,7 +30,7 @@ export default {
         // Autocomplete für Twitch-Streamer
         if (
           interaction.commandName === "twitch" &&
-          focusedOption.name === "streamer_name"
+          focusedOption.name === "user_name"
         ) {
           const streamers = await getTrackedTwitchChannels();
           const choices = streamers.filter((streamer) =>

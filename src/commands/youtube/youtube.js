@@ -1,23 +1,14 @@
+// src/commands/YouTube/youtube.js
 // Importiere die erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
-import { getLatestVideos } from "../../services/youtube.js";
+import { getLatestVideos } from "../../services/youtube/youtube.js";
 import {
   addYouTubeChannel,
   removeYouTubeChannel,
   getTrackedYouTubeChannels,
   setDiscordChannelForYouTubeChannel,
 } from "../../database/youtubeDatabase.js";
-import { exportsConfig } from "../../config.js";
-
-// Importiere die erforderlichen Konfigurationen
-const {
-  YouTubeNotificationUserFeedbackErrorEmoji,
-  YouTubeNotificationUserFeedbackSuccessEmoji,
-  YouTubeNotificationUserFeedbackInfoEmoji,
-  YouTubeNotificationUserFeedbackListEmoji,
-  YouTubeMusicUserFeedbackErrorEmoji,
-  YouTubeMusicUserFeedbackLinkEmoji,
-} = exportsConfig;
+import { youtube } from "../../config/index.js";
 
 export default {
   data: new SlashCommandBuilder()
@@ -33,22 +24,22 @@ export default {
             .setDescription("Füge einen YouTube-Kanal zur Überwachung hinzu.")
             .addStringOption((option) =>
               option
-                .setName("channelName")
+                .setName("channel_name")
                 .setDescription("Der Name des YouTube-Kanals.")
                 .setRequired(true)
             )
-            .addStringOption((option) =>
-              option
-                .setName("channelid")
-                .setDescription("Die ID des YouTube-Kanals.")
-            )
             .addChannelOption((option) =>
               option
-                .setName("notificationchannel")
+                .setName("notification_channel")
                 .setDescription(
                   "Der Discord-Kanal für Benachrichtigungen zu neuen Videos."
                 )
                 .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("channel_id")
+                .setDescription("Die ID des YouTube-Kanals.")
             )
         )
         .addSubcommand((sub) =>
@@ -57,7 +48,7 @@ export default {
             .setDescription("Entferne einen YouTube-Kanal aus der Überwachung.")
             .addStringOption((option) =>
               option
-                .setName("channelid")
+                .setName("channel_id")
                 .setDescription("Die ID des YouTube-Kanals.")
                 .setRequired(true)
             )
@@ -70,21 +61,21 @@ export default {
             )
             .addStringOption((option) =>
               option
-                .setName("channelid")
+                .setName("channel_id")
                 .setDescription("Die ID des YouTube-Kanals.")
                 .setRequired(true)
                 .setAutocomplete(true)
             )
             .addStringOption((option) =>
               option
-                .setName("channelName")
+                .setName("channel_name")
                 .setDescription("Der Name des YouTube-Kanals.")
                 .setRequired(true)
                 .setAutocomplete(true)
             )
             .addChannelOption((option) =>
               option
-                .setName("notificationchannel")
+                .setName("notification_channel")
                 .setDescription(
                   "Der neue Discord-Kanal für Benachrichtigungen."
                 )
@@ -102,19 +93,19 @@ export default {
     const group = interaction.options.getSubcommandGroup(false);
 
     if (group === "notify") {
-      const channelId = interaction.options.getString("channelid", false);
-      const channelName = interaction.options.getString("channelName", false);
+      const channelId = interaction.options.getString("channel_id", false);
+      const channelName = interaction.options.getString("channel_name", false);
 
       if (subcommand === "add") {
         const notificationChannel = interaction.options.getChannel(
-          "notificationchannel"
+          "notification_channel"
         );
 
         try {
           const latestVideos = await getLatestVideos(channelId, 1);
           if (latestVideos.length === 0) {
             return interaction.reply({
-              content: `${YouTubeNotificationUserFeedbackInfoEmoji} Der Kanal hat keine Videos oder existiert nicht.`,
+              content: `${youtube.notification.userFeedback.info.emoji} Der Kanal hat keine Videos oder existiert nicht.`,
               ephemeral: true,
             });
           }
@@ -128,13 +119,13 @@ export default {
           );
 
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackSuccessEmoji} Der YouTube-Kanal **${channelName}**(Kanal-ID: **${channelId}**) wird jetzt überwacht. Benachrichtigungen werden an <#${notificationChannel.id}> gesendet.`,
+            content: `${youtube.notification.userFeedback.success.emoji} Der YouTube-Kanal **${channelName}**(Kanal-ID: **${channelId}**) wird jetzt überwacht. Benachrichtigungen werden an <#${notificationChannel.id}> gesendet.`,
             ephemeral: true,
           });
         } catch (error) {
           console.error(error);
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackErrorEmoji} Fehler beim Hinzufügen des YouTube-Kanals.`,
+            content: `${youtube.notification.userFeedback.error.emoji} Fehler beim Hinzufügen des YouTube-Kanals.`,
             ephemeral: true,
           });
         }
@@ -145,18 +136,18 @@ export default {
           const removed = await removeYouTubeChannel(channelName || channelId);
           if (!removed) {
             return interaction.reply({
-              content: `${YouTubeNotificationUserFeedbackInfoEmoji} Dieser Kanal wird nicht überwacht.`,
+              content: `${youtube.notification.userFeedback.info.emoji} Dieser Kanal wird nicht überwacht.`,
               ephemeral: true,
             });
           }
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackSuccessEmoji} Überwachung für diesen Kanal entfernt.`,
+            content: `${youtube.notification.userFeedback.success.emoji} Überwachung für diesen Kanal entfernt.`,
             ephemeral: true,
           });
         } catch (error) {
           console.error(error);
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackErrorEmoji} Fehler beim Entfernen des YouTube-Kanals.`,
+            content: `${youtube.notification.userFeedback.error.emoji} Fehler beim Entfernen des YouTube-Kanals.`,
             ephemeral: true,
           });
         }
@@ -167,7 +158,7 @@ export default {
           const channels = await getTrackedYouTubeChannels();
           if (channels.length === 0) {
             return interaction.reply({
-              content: `${YouTubeNotificationUserFeedbackInfoEmoji} Keine überwachten YouTube-Kanäle vorhanden.`,
+              content: `${youtube.notification.userFeedback.info.emoji} Keine überwachten YouTube-Kanäle vorhanden.`,
               ephemeral: true,
             });
           }
@@ -185,13 +176,13 @@ export default {
             )
             .join("\n");
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackListEmoji} Überwachte YouTube-Kanäle:\n${list}`,
+            content: `${youtube.notification.userFeedback.list.emoji} Überwachte YouTube-Kanäle:\n${list}`,
             ephemeral: true,
           });
         } catch (error) {
           console.error(error);
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackErrorEmoji} Fehler beim Abrufen der überwachten Kanäle.`,
+            content: `${youtube.notification.userFeedback.error.emoji} Fehler beim Abrufen der überwachten Kanäle.`,
             ephemeral: true,
           });
         }
@@ -199,7 +190,7 @@ export default {
 
       if (subcommand === "set-channel") {
         const notificationChannel = interaction.options.getChannel(
-          "notificationchannel"
+          "notification_channel"
         );
 
         try {
@@ -211,19 +202,19 @@ export default {
 
           if (!updated.success) {
             return interaction.reply({
-              content: `${YouTubeNotificationUserFeedbackInfoEmoji} Der Kanal **${channelId}** wird nicht überwacht.`,
+              content: `${youtube.notification.userFeedback.info.emoji} Der Kanal **${channelId}** wird nicht überwacht.`,
               ephemeral: true,
             });
           }
 
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackSuccessEmoji} Benachrichtigungskanal für **${channelId}** wurde auf <#${notificationChannel.id}> geändert.`,
+            content: `${youtube.notification.userFeedback.success.emoji} Benachrichtigungskanal für **${channelId}** wurde auf <#${notificationChannel.id}> geändert.`,
             ephemeral: true,
           });
         } catch (error) {
           console.error(error);
           return interaction.reply({
-            content: `${YouTubeNotificationUserFeedbackErrorEmoji} Fehler beim Ändern des Benachrichtigungskanals.`,
+            content: `${youtube.notification.userFeedback.error.emoji} Fehler beim Ändern des Benachrichtigungskanals.`,
             ephemeral: true,
           });
         }
@@ -233,12 +224,12 @@ export default {
         try {
           const music = await searchMusic(query);
           return interaction.reply(
-            `${YouTubeMusicEmoji} **${music.title}**\n${YouTubeMusicUserFeedbackLinkEmoji} https://www.youtube.com/watch?v=${music.id}`
+            `${youtube.music.emoji} **${music.title}**\n${youtube.music.userFeedback.link.emoji} https://www.youtube.com/watch?v=${music.id}`
           );
         } catch (error) {
           console.error(error);
           return interaction.reply(
-            `${YouTubeMusicUserFeedbackErrorEmoji}, "Fehler beim Abrufen der YouTube-Musik.`
+            `${youtube.music.userFeedback.error.emoji} Fehler beim Abrufen der YouTube-Musik.`
           );
         }
       }

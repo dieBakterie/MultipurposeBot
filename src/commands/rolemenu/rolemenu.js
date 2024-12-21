@@ -1,171 +1,167 @@
-import { SlashCommandBuilder } from "discord.js";
-import { exportsConfig } from "../../config.js";
-const {
-  GeneralUserFeedbackErrorEmoji,
-  GeneralUserFeedbackSuccessEmoji,
-  GeneralUserFeedbackInfoEmoji,
-} = exportsConfig;
+// src/commands/Rolemenu/rolemenu.js
+import pkg from "discord.js";
+const { MessageActionRow, ButtonBuilder, SlashCommandBuilder } = pkg;
 import {
-  createRoleMenu,
-  addActiveSetup,
-  addRoleMenuRole,
-  removeActiveSetup,
-} from "../../database/.js";
-
-const activeSetups = new Map();
-const SETUP_TIMEOUT = 10 * 60 * 1000;
+  createRoleMenuGroup,
+  addRolesToGroup,
+  fetchGroupRoles,
+  fetchAllGroups,
+  updateGroupRole,
+} from "../../database/rolemenuDatabase.js";
 
 export default {
   data: new SlashCommandBuilder()
     .setName("rolemenu")
-    .setDescription("Verwalte Rolemenus.")
+    .setDescription("Erstelle und bearbeite RoleMenus.")
     .addSubcommand((sub) =>
       sub
-        .setName("setup")
-        .setDescription("Startet das Setup für ein Rolemenu.")
+        .setName("set-group")
+        .setDescription("Erstelle oder bearbeite eine Gruppe.")
         .addStringOption((option) =>
           option
             .setName("group")
-            .setDescription("Name der Gruppe.")
+            .setDescription("Der Name der Gruppe.")
             .setRequired(true)
         )
         .addStringOption((option) =>
           option
             .setName("mode")
-            .setDescription("Modus: Einzelwahl oder Mehrfachwahl.")
-            .setRequired(true)
+            .setDescription("Modus der Auswahl.")
             .addChoices(
-              { name: "Einzelwahl", value: "single" },
-              { name: "Mehrfachwahl", value: "multi" }
+              { name: "Einzelauswahl", value: "single" },
+              { name: "Mehrfachauswahl", value: "multiple" }
             )
+            .setRequired(true)
         )
         .addStringOption((option) =>
           option
-            .setName("text")
-            .setDescription("Nachrichtentext für das Rolemenu.")
+            .setName("roles")
+            .setDescription(
+              "Definiere Rollen mit Beschriftung: role1:label1,role2:label2"
+            )
             .setRequired(true)
         )
     )
     .addSubcommand((sub) =>
       sub
-        .setName("complete")
-        .setDescription("Schließt das Setup eines Rolemenus ab.")
+        .setName("create")
+        .setDescription("Erstelle ein RoleMenu aus einer Gruppe.")
         .addStringOption((option) =>
           option
-            .setName("message_id")
-            .setDescription("Nachricht-ID des Rolemenus.")
+            .setName("group")
+            .setDescription("Der Name der Gruppe.")
             .setRequired(true)
+            .setAutocomplete(true)
         )
     )
     .addSubcommand((sub) =>
       sub
         .setName("edit")
-        .setDescription("Bearbeite ein Rolemenu.")
+        .setDescription("Bearbeite eine existierende Gruppe.")
         .addStringOption((option) =>
           option
-            .setName("message_id")
-            .setDescription("Nachricht-ID des Rolemenus.")
+            .setName("group")
+            .setDescription("Der Name der Gruppe.")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((option) =>
+          option
+            .setName("role")
+            .setDescription("Die Rolle, die bearbeitet werden soll.")
+            .setAutocomplete(true)
             .setRequired(true)
         )
+        .addStringOption((option) =>
+          option
+            .setName("new_label")
+            .setDescription("Neue Beschriftung für die Rolle.")
+        )
+        .addStringOption((option) =>
+          option.setName("emoji").setDescription("Neues .emoji/Neue Icon.")
+        )
     ),
+
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
+    const groupName = interaction.options.getString("group");
 
-    if (subcommand === "setup") {
-      const groupName = interaction.options.getString("group");
-      const mode = interaction.options.getString("mode");
-      const text = interaction.options.getString("text");
-      const guildId = interaction.guild.id;
+    try {
+      if (subcommand === "set-group") {
+        const mode = interaction.options.getString("mode");
+        const rolesInput = interaction.options.getString("roles");
 
-      const menuMessage = await interaction.channel.send(text);
-
-      // Verwende die ausgelagerte Funktion, um RoleMenu zu erstellen
-      const rolemenuId = await createRoleMenu(
-        menuMessage.id,
-        interaction.channel.id,
-        groupName,
-        mode,
-        guildId
-      );
-
-      await interaction.reply(
-        `${GeneralUserFeedbackSuccessEmoji} Rolemenu erstellt:\n- Nachricht-ID: **${
-          menuMessage.id
-        }**\n- Gruppe: **${groupName}**\n- Modus: **${
-          mode === "single" ? "Einzelwahl" : "Mehrfachwahl"
-        }**`
-      );
-
-      await interaction.followUp(
-        `${GeneralUserFeedbackInfoEmoji} Reagiere mit Emojis auf diese Nachricht und wähle anschließend Rollen aus.`
-      );
-
-      const filter = (reaction, user) => !user.bot;
-      const collector = menuMessage.createReactionCollector({ filter });
-
-      activeSetups.set(menuMessage.id, {
-        collector,
-        timeout: Date.now() + SETUP_TIMEOUT,
-      });
-
-      // Verwende die ausgelagerte Funktion, um das Setup hinzuzufügen
-      await addActiveSetup(
-        menuMessage.id,
-        guildId,
-        new Date(Date.now() + SETUP_TIMEOUT)
-      );
-
-      collector.on("collect", async (reaction, user) => {
-        const emoji = reaction.emoji.name;
-
-        await interaction.followUp({
-          content: `${GeneralUserFeedbackInfoEmoji} Reagiere mit **${emoji}**. Wähle nun eine Rolle.`,
-          ephemeral: true,
+        // Parse Rollen und Labels
+        const roles = rolesInput.split(",").map((pair) => {
+          const [roleId, label] = pair.split(":");
+          return { roleId: roleId.trim(), label: label.trim() };
         });
 
-        const roleResponse = await interaction.channel.awaitMessages({
-          filter: (msg) => msg.author.id === user.id,
-          max: 1,
-          time: 60 * 1000,
-        });
+        // Gruppe erstellen oder aktualisieren
+        await createRoleMenuGroup(groupName, mode, interaction.guild.id);
 
-        const role = roleResponse.first().mentions.roles.first();
-        if (!role) {
-          await interaction.followUp({
-            content: `${GeneralUserFeedbackInfoEmoji} Ungültige Rolle. Bitte erneut versuchen.`,
-            ephemeral: true,
-          });
-          return;
+        // Rollen zur Gruppe hinzufügen
+        for (const { roleId, label } of roles) {
+          await addRolesToGroup(groupName, roleId, label, interaction.guild.id);
         }
 
-        // Verwende die ausgelagerte Funktion, um die Rolle hinzuzufügen
-        await addRoleMenuRole(rolemenuId, emoji, role.id);
-
-        await interaction.followUp(
-          `${GeneralUserFeedbackSuccessEmoji} Emoji **${emoji}** wurde mit der Rolle <@&${role.id}> verknüpft.`
-        );
-      });
-    } else if (subcommand === "complete") {
-      const messageId = interaction.options.getString("message_id");
-
-      if (!activeSetups.has(messageId)) {
         await interaction.reply({
-          content: `${GeneralUserFeedbackInfoEmoji} Kein aktives Setup für diese Nachricht gefunden.`,
+          content: `Gruppe **${groupName}** wurde erstellt/aktualisiert.`,
           ephemeral: true,
         });
-        return;
+      } else if (subcommand === "create") {
+        const roles = await fetchGroupRoles(groupName, interaction.guild.id);
+
+        if (!roles || roles.length === 0) {
+          return interaction.reply({
+            content: `Keine Rollen in der Gruppe **${groupName}** gefunden.`,
+            ephemeral: true,
+          });
+        }
+
+        // Dynamische Buttons erstellen
+        const rows = [];
+        let actionRow = new MessageActionRow();
+
+        for (let i = 0; i < roles.length; i++) {
+          const { roleId, label, emoji } = roles[i];
+
+          const button = new ButtonBuilder()
+            .setCustomId(`rolemenu_${roleId}`)
+            .setLabel(label)
+            .setStyle("PRIMARY")
+            .set.emoji(emoji);
+
+          actionRow.addComponents(button);
+
+          if (actionRow.components.length === 5 || i === roles.length - 1) {
+            rows.push(actionRow);
+            actionRow = new MessageActionRow();
+          }
+        }
+
+        await interaction.reply({
+          content: `**${groupName}** RoleMenu`,
+          components: rows,
+        });
+      } else if (subcommand === "edit") {
+        const roleId = interaction.options.getString("role");
+        const newLabel = interaction.options.getString("new_label");
+        const newEmoji = interaction.options.getString("emoji");
+
+        await updateGroupRole(groupName, roleId, newLabel, newEmoji);
+
+        await interaction.reply({
+          content: `Rolle in Gruppe **${groupName}** wurde aktualisiert.`,
+          ephemeral: true,
+        });
       }
-
-      const { collector } = activeSetups.get(messageId);
-      collector.stop();
-      activeSetups.delete(messageId);
-
-      // Verwende die ausgelagerte Funktion, um das Setup zu entfernen
-      await removeActiveSetup(messageId);
-
-      await interaction.reply(
-        `${GeneralUserFeedbackSuccessEmoji} Das Setup für die Nachricht **${messageId}** wurde abgeschlossen.`
-      );
+    } catch (error) {
+      console.error("[Rolemenu Command] Fehler bei der Verarbeitung des RoleMenus:", error);
+      await interaction.reply({
+        content: "[Rolemenu Command] Fehler bei der Verarbeitung. Versuche es erneut.",
+        ephemeral: true,
+      });
     }
   },
 };

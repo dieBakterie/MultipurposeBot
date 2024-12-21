@@ -1,8 +1,10 @@
+// src/commands/Music/stop.js
+// Importiere die erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
-import { shoukaku } from "../../music/player.js";
-import { getQueue } from "../../music/queue.js";
-import { exportsConfig } from "../../config.js";
-const { GeneralMusicUserFeedbackErrorEmoji } = exportsConfig;
+import { shoukaku } from "../../index.js";
+import { getQueue } from "../../services/music/queue.js";
+import { generalFeedbackError } from "../../alias.js";
+
 export default {
   data: new SlashCommandBuilder()
     .setName("stop")
@@ -13,7 +15,7 @@ export default {
       const queue = getQueue(guildId);
       if (!queue || !queue.current) {
         return interaction.reply({
-          content: `${GeneralMusicUserFeedbackErrorEmoji} Es wird aktuell keine Musik abgespielt.`,
+          content: `${generalFeedbackError.emoji} Es wird aktuell keine Musik abgespielt.`,
           ephemeral: true,
         });
       }
@@ -27,7 +29,7 @@ export default {
     } catch (error) {
       console.error(`Fehler beim Stoppen der Wiedergabe: ${error.message}`);
       await interaction.reply({
-        content: `${GeneralMusicUserFeedbackErrorEmoji} Fehler beim Stoppen der Wiedergabe.`,
+        content: `${generalFeedbackError.emoji} Fehler beim Stoppen der Wiedergabe.`,
         ephemeral: true,
       });
     }

@@ -1,7 +1,9 @@
+// src/commands/Music/play.js
+// Importiere die erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
-import { addSong, getQueue } from "../../music/queue.js";
-import { playSong } from "../../music/player.js";
-import { sendMusicControls } from "../../music/controls.js";
+import { addSong, getQueue } from "../../services/music/queue.js";
+import { playSong } from "../../services/music/player.js";
+import { sendMusicControls } from "../../services/music/createMusicControls.js";
 
 export default {
   data: new SlashCommandBuilder()

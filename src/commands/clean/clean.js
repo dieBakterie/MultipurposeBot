@@ -1,11 +1,8 @@
-// Importiere die benötigten Module
+// src/commands/Clean/clean.js
+// Importiere die erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
-// import { console.log } from "../../utils/logging.js";
-import { exportsConfig } from "../../config.js";
-const { DiscordUserFeedbackErrorEmoji, DiscordUserFeedbackSuccessEmoji } =
-  exportsConfig;
+import { generalFeedbackError, generalFeedbackSuccess } from "../../alias.js";
 
-// Export the command
 export default {
   data: new SlashCommandBuilder()
     .setName("clean")
@@ -44,9 +41,9 @@ export default {
 
     // Validierung der Anzahl
     if (num < 1 || num > 100) {
-      /*      console.log(${DiscordUserFeedbackErrorEmoji} Fehlerhafte Anzahl: ${num}); */
+      console.log(`[Clean Command] Fehlerhafte Anzahl: ${num}`);
       return interaction.reply({
-        content: `${DiscordUserFeedbackErrorEmoji} Die Anzahl muss zwischen 1 und 100 liegen.`,
+        content: `${generalFeedbackError.emoji} Die Anzahl muss zwischen 1 und 100 liegen.`,
         ephemeral: true,
       });
     }
@@ -56,12 +53,9 @@ export default {
       try {
         regex = new RegExp(regexPattern);
       } catch (error) {
-        console.log(
-          `${DiscordUserFeedbackErrorEmoji} Ungültiges Regex-Muster: ${regexPattern}`,
-          error.message
-        );
+        console.log(`[Clean Command] Ungültiges Regex-Muster: ${regexPattern}`);
         return interaction.reply({
-          content: `${DiscordUserFeedbackErrorEmoji} Ungültiges Regex-Muster.`,
+          content: `${generalFeedbackError.emoji} Ungültiges Regex-Muster.`,
           ephemeral: true,
         });
       }
@@ -71,9 +65,7 @@ export default {
       const channel = interaction.channel;
 
       // Nachrichten abrufen (maximal 100)
-      const fetchedMessages = await channel.messages.fetch({
-        limit: 100,
-      });
+      const fetchedMessages = await channel.messages.fetch({ limit: 100 });
 
       // Nachrichten filtern
       let messagesToDelete = fetchedMessages.filter((msg) => {
@@ -91,29 +83,21 @@ export default {
 
       // Erfolgsmeldung
       console.log(
-        `${DiscordUserFeedbackSuccessEmoji} Erfolgreich ${deleted.size} Nachrichten gelöscht (Kanal: ${channel.id}).`
+        `[Clean Command] ${generalFeedbackSuccess.emoji} Erfolgreich ${deleted.size} Nachrichten gelöscht (Kanal: ${channel.id}).`
       );
-      await interaction.reply({
-        content: `${DiscordUserFeedbackSuccessEmoji} Erfolgreich ${deleted.size} Nachrichten gelöscht.`,
+      return interaction.reply({
+        content: `${generalFeedbackSuccess.emoji} Erfolgreich ${deleted.size} Nachrichten gelöscht.`,
         ephemeral: true,
       });
     } catch (error) {
-      console.log(
-        `${DiscordUserFeedbackErrorEmoji} Fehler beim Löschen: ${error.message}`
-      );
       console.error(
-        `${DiscordUserFeedbackErrorEmoji} Fehler beim Löschen der Nachrichten:`,
+        `[Clean Command] ${generalFeedbackError.emoji} Fehler beim Löschen der Nachrichten:`,
         error
       );
-      await interaction.reply({
-        content: `${DiscordUserFeedbackErrorEmoji} Ein Fehler ist aufgetreten. Stellen Sie sicher, dass ich die Berechtigungen habe, Nachrichten zu löschen.`,
+      return interaction.reply({
+        content: `${generalFeedbackError.emoji} Ein Fehler ist aufgetreten. Stellen Sie sicher, dass ich die Berechtigungen habe, Nachrichten zu löschen.`,
         ephemeral: true,
       });
     }
-
-    return interaction.reply({
-      content: `${DiscordUserFeedbackErrorEmoji} Unbekannter Befehl.`,
-      ephemeral: true,
-    });
   },
 };

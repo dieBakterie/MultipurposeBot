@@ -1,3 +1,4 @@
+// src/utils/roleActions.js
 export async function addRole(member, roleId) {
   await member.roles.add(roleId);
   console.log(`Rolle ${roleId} zu ${member.user.tag} hinzugefügt.`);

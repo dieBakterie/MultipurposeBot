@@ -1,33 +1,43 @@
-import { Client, GatewayIntentBits, Collection } from "discord.js";
+// src/index.js
+import {
+  Client,
+  GatewayIntentBits,
+  Collection,
+  REST,
+  Routes,
+} from "discord.js";
 import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
-import { exportsConfig } from "./config.js";
+import { Shoukaku, Connectors } from "shoukaku";
 import { db } from "./database/database.js";
 import { log } from "./utils/logging.js";
-import { REST, Routes } from "discord.js";
-
-// Konfigurationsvariablen
-const {
-  DiscordToken,
-  DiscordClientId,
-  DiscordGuildId,
-  DiscordUserFeedbackErrorEmoji,
-  DiscordUserFeedbackSuccessEmoji,
-} = exportsConfig;
+import {
+  discordToken,
+  discordClientId,
+  discordGuildId,
+  discordFeedbackSuccess,
+  discordFeedbackError,
+  lavaLinkHost,
+  lavaLinkPort,
+  lavaLinkPassword,
+  isDocker,
+  nodeEnvironment,
+} from "./alias.js";
 
 const __dirname = path
   .dirname(new URL(import.meta.url).pathname)
   .replace(/^\/([a-zA-Z]):/, "$1:"); // Windows-Kompatibilität
 
 // Discord Client Setup
-const client = new Client({
+export const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates,
   ],
 });
 
@@ -35,86 +45,101 @@ const client = new Client({
 client.expectedMessages = new Map();
 client.commands = new Collection();
 
-// Funktion zum rekursiven Laden von Dateien
-function loadFilesRecursively(directory, fileExtension = ".js") {
-  let files = [];
-  const entries = fs.readdirSync(directory, { withFileTypes: true });
+// Dynamische Host/Port-Logik: Prüfen, ob im Docker-Container läuft
+let dynamiclavaLinkHost;
+let dynamiclavaLinkPort;
 
-  for (const entry of entries) {
+if (isDocker === "true") {
+  console.log("Docker-Container erkannt.");
+  dynamiclavaLinkHost = "lavaLink";
+  dynamiclavaLinkPort = 2333;
+}
+
+// Fallback-Logik
+const finalLavaLinkHost = dynamiclavaLinkHost || lavaLinkHost;
+const finalLavaLinkPort = dynamiclavaLinkPort || lavaLinkPort;
+
+// Shoukaku-Setup
+export const LavalinkNodes = [
+  {
+    name: "MainNode",
+    url: `${finalLavaLinkHost}:${finalLavaLinkPort}`,
+    auth: lavaLinkPassword,
+  },
+];
+
+export const shoukaku = new Shoukaku(
+  new Connectors.DiscordJS(client),
+  LavalinkNodes,
+  {
+    moveOnDisconnect: false,
+    resume: true,
+    reconnectTries: 5,
+    reconnectInterval: 5000,
+  }
+);
+
+// Shoukaku-Events
+shoukaku.on("ready", (name) =>
+  console.log(`Lavalink Node ${name} ist bereit!`)
+);
+shoukaku.on("error", (name, error) =>
+  console.error(`Lavalink Node ${name} hat einen Fehler:`, error)
+);
+shoukaku.on("close", (name, code, reason) =>
+  console.warn(`Lavalink Node ${name} wurde geschlossen:`, { code, reason })
+);
+shoukaku.on("disconnect", (name, players, moved) =>
+  console.warn(
+    `Lavalink Node ${name} wurde getrennt. Players: ${players.size}. Moved: ${moved}`
+  )
+);
+
+// Funktion zum Laden von Commands und Events
+async function loadFilesRecursively(directory, type) {
+  const files = fs.readdirSync(directory, { withFileTypes: true });
+
+  const filePaths = [];
+
+  for (const entry of files) {
     const fullPath = path.join(directory, entry.name);
+
     if (entry.isDirectory()) {
-      files = files.concat(loadFilesRecursively(fullPath, fileExtension));
-    } else if (entry.isFile() && entry.name.endsWith(fileExtension)) {
-      files.push(fullPath);
+      // Rekursive Verarbeitung für Unterverzeichnisse
+      const nestedFiles = await loadFilesRecursively(fullPath, type);
+      if (Array.isArray(nestedFiles)) {
+        filePaths.push(...nestedFiles);
+      }
+    } else if (entry.isFile() && entry.name.endsWith(".js")) {
+      filePaths.push(fullPath);
     }
   }
 
-  return files;
+  return filePaths; // Sicherstellen, dass ein Array zurückgegeben wird
 }
 
 // Funktion zur Registrierung der Commands bei Discord
-async function registerCommands() {
+async function registerCommandsAndEvents() {
   const commandData = client.commands.map((command) => command.data.toJSON());
 
-  const rest = new REST({ version: "10" }).setToken(DiscordToken);
+  const rest = new REST({ version: "10" }).setToken(discordToken);
 
   try {
     console.log("Registriere Slash-Befehle bei Discord...");
 
     await rest.put(
-      Routes.applicationGuildCommands(
-        DiscordClientId,
-        DiscordGuildId // Oder null, um globale Befehle zu registrieren
-      ),
-      { body: commandData }
+      Routes.applicationGuildCommands(discordClientId, discordGuildId),
+      {
+        body: commandData,
+      }
     );
 
     console.log(
-      `${DiscordUserFeedbackSuccessEmoji} Slash-Befehle erfolgreich registriert!`
+      `${discordFeedbackSuccess.emoji} Slash-Befehle erfolgreich registriert!`
     );
   } catch (error) {
     console.error(
-      `${DiscordUserFeedbackErrorEmoji} Fehler bei der Registrierung der Slash-Befehle:`,
-      error
-    );
-  }
-}
-
-// Funktion zum Registrieren von Commands oder Events
-async function logCommandOrEvent(fileURL, name, client, db, type) {
-  try {
-    const { default: commandOrEvent } = await import(fileURL);
-
-    log.info(`Lade ${type} "${name}".`);
-    log.info(`Datei: ${fileURL}`);
-
-    if (type === "event") {
-      // Event registrieren
-      if (commandOrEvent.once) {
-        client.once(name, (...args) =>
-          commandOrEvent.execute(...args, client, db)
-        );
-      } else {
-        client.on(name, (...args) =>
-          commandOrEvent.execute(...args, client, db)
-        );
-      }
-    } else if (type === "command") {
-      // Command registrieren
-      client.commands.set(name, commandOrEvent);
-    }
-
-    log.info(
-      `${
-        type.charAt(0).toUpperCase() + type.slice(1)
-      } "${name}" erfolgreich geladen.`
-    );
-  } catch (error) {
-    log.error(
-      `${DiscordUserFeedbackErrorEmoji} Fehler beim Laden von ${type} "${name}": ${error.message}`
-    );
-    console.error(
-      `${DiscordUserFeedbackErrorEmoji} Fehler beim Laden von ${type} "${name}":`,
+      `${discordFeedbackError.emoji} Fehler bei der Registrierung der Slash-Befehle:`,
       error
     );
   }
@@ -126,38 +151,40 @@ async function startBot() {
     console.log("Starte den Bot...");
 
     // Commands laden
-    const commandFiles = loadFilesRecursively(
-      path.resolve(__dirname, "./commands")
+    console.log("Lade Commands...");
+    await loadFilesRecursively(
+      path.resolve(__dirname, "./commands"),
+      "command"
     );
-
-    for (const filePath of commandFiles) {
-      const fileURL = pathToFileURL(filePath).href; // Konvertiere zu file:// URL
-      const commandName = path.basename(filePath, ".js"); // Extrahiere den Befehl-Namen
-      await logCommandOrEvent(fileURL, commandName, client, db, "command");
-    }
-
-    // Commands bei Discord registrieren
-    await registerCommands();
 
     // Events laden
-    const eventFiles = loadFilesRecursively(
-      path.resolve(__dirname, "./events")
-    );
+    console.log("Lade Events...");
+    await loadFilesRecursively(path.resolve(__dirname, "./events"), "event");
 
-    for (const filePath of eventFiles) {
-      const fileURL = pathToFileURL(filePath).href; // Konvertiere zu file:// URL
-      const eventName = path.basename(filePath, ".js"); // Extrahiere den Event-Namen
-      await logCommandOrEvent(fileURL, eventName, client, db, "event");
+    // Commands bei Discord registrieren
+    console.log("Registriere Commands bei Discord...");
+    await registerCommandsAndEvents();
+
+    // Bot-Login
+    console.log("Verbinde mit Discord...");
+    await client.login(discordToken);
+
+    // Synchronisiere Discord-Kanalnamen
+    const guild = client.guilds.cache.first();
+    if (guild) {
+      console.log("Synchronisiere Discord-Kanalnamen...");
+      await syncChannelNames(guild);
     }
 
-    // Bot starten
-    await client.login(DiscordToken);
     console.log("Bot erfolgreich gestartet!");
   } catch (error) {
     console.error(
-      `${DiscordUserFeedbackErrorEmoji} Fehler beim Starten des Bots:`,
-      error
+      `${discordFeedbackError.emoji} Fehler beim Starten des Bots:`,
+      error.message
     );
+    if (nodeEnvironment === "development") {
+      console.error(error); // Detailliertes Logging in der Entwicklungsumgebung
+    }
   }
 }
 

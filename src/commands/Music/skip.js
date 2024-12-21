@@ -1,13 +1,14 @@
-// Importiere alle erforderlichen Module
+// src/commands/Music/skip.js
+// Importiere die erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
-import { getQueue, skipSong } from "../../music/queue.js";
-// import { playSong } from "../music/player.js";
-// Importiere alle erforderlichen Konfigurationsobjekte
-import { exportsConfig } from "../../config.js";
-const { GeneralMusicUserFeedbackInfoEmoji,
-  GeneralMusicControlsSkipEmoji,
-  GeneralMusicUserFeedbackErrorEmoji,
-} = exportsConfig;
+import { getQueue } from "../../services/music/queue.js";
+import { skipSong } from "../../services/music/player.js";
+// Importiere die erforderlichen Alias'
+import {
+  generalFeedbackInfo,
+  generalFeedbackError,
+  generalMusicSkip,
+} from "../../alias.js";
 
 export default {
   data: new SlashCommandBuilder()
@@ -22,7 +23,7 @@ export default {
     // Überprüfen, ob Musik abgespielt wird
     if (!queue || !queue.current) {
       return interaction.reply({
-        content: `${GeneralMusicUserFeedbackInfoEmoji} Es wird aktuell keine Musik abgespielt.`,
+        content: `${generalFeedbackInfo.emoji} Es wird aktuell keine Musik abgespielt.`,
         ephemeral: true,
       });
     }
@@ -34,20 +35,22 @@ export default {
       // Starte den nächsten Song, falls die Warteschlange nicht leer ist
       if (queue.songs.length > 0) {
         await playSong(guildId);
-        await interaction.reply(
-          `${GeneralMusicControlsSkipEmoji} Song übersprungen. Starte nächsten Song.`,
-        );
+        await interaction.reply({
+          content: `${generalMusicSkip} Song übersprungen. Starte nächsten Song.`,
+          ephemeral: true,
+        });
       } else {
-        await interaction.reply(
-          `${GeneralMusicControlsSkipEmoji} Song übersprungen. Keine weiteren Songs in der Warteschlange.`,
-        );
+        await interaction.reply({
+          content: `${generalMusicSkip} Song übersprungen. Keine weiteren Songs in der Warteschlange.`,
+          ephemeral: true,
+        });
       }
     } catch (error) {
       console.error(
-        `${GeneralMusicUserFeedbackErrorEmoji} Fehler beim Überspringen des Songs: ${error.message}`,
+        `${generalFeedbackError.emoji} Fehler beim Überspringen des Songs: ${error.message}`
       );
       await interaction.reply({
-        content: `${GeneralMusicUserFeedbackErrorEmoji} Fehler beim Überspringen des Songs.`,
+        content: `${generalFeedbackError.emoji} Fehler beim Überspringen des Songs.`,
         ephemeral: true,
       });
     }
