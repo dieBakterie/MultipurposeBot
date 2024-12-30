@@ -149,6 +149,8 @@ export async function getTrackedTwitchChannels() {
 
 /**
  * Aktualisiert `user_name` und `display_name` in der Datenbank.
+ * @param {string} userId - Twitch-Benutzer-ID.
+ * @param {Object} streamerDetails - Objekt mit `user_name` und `display_name`.
  */
 export async function updateStreamerInfo(userId, streamerDetails) {
   try {

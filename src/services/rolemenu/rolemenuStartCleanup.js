@@ -1,4 +1,4 @@
-// src/services/rolemenu/rolemenuStartCleanup.js
+// src/services/Rolemenu/rolemenuStartCleanup.js
 // Funktion: Cleanup-Intervall starten
 export async function startRolemenuCleanup(db) {
   const now = new Date();

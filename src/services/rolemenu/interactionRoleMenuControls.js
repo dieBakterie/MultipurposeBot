@@ -1,4 +1,4 @@
-// src/services/rolemenu/interactionRoleMenuControls.js
+// src/services/Rolemenu/interactionRoleMenuControls.js
 import { addRole, removeRole } from "../../utils/roleActions.js";
 
 export async function handleRoleMenuControl(interaction) {

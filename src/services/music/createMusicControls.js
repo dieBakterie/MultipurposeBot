@@ -1,4 +1,4 @@
-// src/services/music/createMusicControls.js
+// src/services/Music/createMusicControls.js
 import {
   Message,
   MessageActionRow,

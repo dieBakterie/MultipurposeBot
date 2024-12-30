@@ -1,4 +1,4 @@
-// src/services/music/queue.js
+// src/services/Music/queue.js
 const queue = new Map(); // GuildID => { songs: [], current: null, connection: null }
 
 /**

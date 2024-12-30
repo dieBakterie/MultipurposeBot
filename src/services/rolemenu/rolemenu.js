@@ -1,4 +1,4 @@
-// src/services/rolemenu/rolemenu.js
+// src/services/Rolemenu/rolemenu.js
 /// sollte der bot abstürzen oder neugestartet werden, wird das setup wiederhergestellt
 const activeSetups = new Map(); // Map für aktive Setups
 const SETUP_TIMEOUT = 10 * 60 * 1000; // 10 Minuten Timeout für Setups

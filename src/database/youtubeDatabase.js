@@ -1,11 +1,6 @@
 // src/database/youtubeDatabase.js
 import { db } from "./database.js";
-
-// Utility für Fehlerbehandlung
-function logAndThrowError(message, error) {
-  console.error(`${message}:`, error.message);
-  throw new Error(message);
-}
+import { logAndThrowError } from "../utils/helpers.js";
 
 /**
  * Fügt einen YouTube-Kanal hinzu oder aktualisiert den neuesten Video-Status

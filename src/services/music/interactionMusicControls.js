@@ -1,4 +1,4 @@
-// src/services/music/interactionMusicControls.js
+// src/services/Music/interactionMusicControls.js
 import { getQueue } from "./queue.js";
 import { playSong, pauseSong, skipSong, stopPlayback } from "./player.js";
 import { updateMusicControls } from "./createMusicControls.js";

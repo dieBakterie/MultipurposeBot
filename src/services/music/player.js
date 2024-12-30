@@ -1,5 +1,4 @@
-// src/services/music/player.js
-// src/music/player.js
+// src/services/Music/player.js
 import { shoukaku } from "../../index.js";
 import { getQueue, deleteQueue } from "./queue.js";
 
