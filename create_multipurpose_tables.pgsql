@@ -136,8 +136,8 @@ DROP TABLE IF EXISTS twitch_streamers CASCADE;
 CREATE TABLE twitch_streamers (
   id SERIAL PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL UNIQUE,
-  user_name VARCHAR(255) NOT NULL,
-  display_name VARCHAR(255) NOT NULL,
+  user_name VARCHAR(255) NOT NULL UNIQUE,
+  display_name VARCHAR(255) NOT NULL UNIQUE,
   discord_channel_id VARCHAR(255) NOT NULL,
   discord_channel_name VARCHAR(255) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
