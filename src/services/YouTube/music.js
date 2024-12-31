@@ -1,4 +1,4 @@
-// src/services/YouTube/youtubeMusic.js
+// src/services/YouTube/music.js
 import { searchVideos } from "./youtube.js";
 import { youtubeMusicFeedbackError } from "../../alias.js";
 

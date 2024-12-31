@@ -1,4 +1,4 @@
-// test/config/test_alias.js
+// test/config/test.js
 import dotenv from "dotenv";
 dotenv.config();
 

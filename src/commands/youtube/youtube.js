@@ -1,14 +1,23 @@
 // src/commands/YouTube/youtube.js
 // Importiere die erforderlichen Module
 import { SlashCommandBuilder } from "discord.js";
-import { getLatestVideos } from "../../services/youtube/youtube.js";
+import { getLatestVideos } from "../../services/YouTube/youtube.js";
+import { searchMusic } from "../../services/YouTube/music.js";
 import {
   addYouTubeChannel,
   removeYouTubeChannel,
   getTrackedYouTubeChannels,
   setDiscordChannelForYouTubeChannel,
 } from "../../database/youtubeDatabase.js";
-import { youtube } from "../../config/index.js";
+import {
+  youtubeNotificationFeedbackSuccess,
+  youtubeNotificationFeedbackError,
+  youtubeNotificationFeedbackInfo,
+  youtubeNotificationFeedbackList,
+  youtubeMusicEmoji,
+  youtubeMusicFeedbackError,
+  youtubeMusicFeedbackLink,
+} from "../../alias.js";
 
 export default {
   data: new SlashCommandBuilder()
@@ -105,7 +114,7 @@ export default {
           const latestVideos = await getLatestVideos(channelId, 1);
           if (latestVideos.length === 0) {
             return interaction.reply({
-              content: `${youtube.notification.userFeedback.info.emoji} Der Kanal hat keine Videos oder existiert nicht.`,
+              content: `${youtubeNotificationFeedbackInfo.emoji} Der Kanal hat keine Videos oder existiert nicht.`,
               ephemeral: true,
             });
           }
@@ -119,13 +128,13 @@ export default {
           );
 
           return interaction.reply({
-            content: `${youtube.notification.userFeedback.success.emoji} Der YouTube-Kanal **${channelName}**(Kanal-ID: **${channelId}**) wird jetzt überwacht. Benachrichtigungen werden an <#${notificationChannel.id}> gesendet.`,
+            content: `${youtubeNotificationFeedbackSuccess.emoji} Der YouTube-Kanal **${channelName}**(Kanal-ID: **${channelId}**) wird jetzt überwacht. Benachrichtigungen werden an <#${notificationChannel.id}> gesendet.`,
             ephemeral: true,
           });
         } catch (error) {
           console.error(error);
           return interaction.reply({
-            content: `${youtube.notification.userFeedback.error.emoji} Fehler beim Hinzufügen des YouTube-Kanals.`,
+            content: `${youtubeNotificationFeedbackError.emoji} Fehler beim Hinzufügen des YouTube-Kanals.`,
             ephemeral: true,
           });
         }
@@ -136,18 +145,18 @@ export default {
           const removed = await removeYouTubeChannel(channelName || channelId);
           if (!removed) {
             return interaction.reply({
-              content: `${youtube.notification.userFeedback.info.emoji} Dieser Kanal wird nicht überwacht.`,
+              content: `${youtubeNotificationFeedbackInfo.emoji} Dieser Kanal wird nicht überwacht.`,
               ephemeral: true,
             });
           }
           return interaction.reply({
-            content: `${youtube.notification.userFeedback.success.emoji} Überwachung für diesen Kanal entfernt.`,
+            content: `${youtubeNotificationFeedbackSuccess.emoji} Überwachung für diesen Kanal entfernt.`,
             ephemeral: true,
           });
         } catch (error) {
           console.error(error);
           return interaction.reply({
-            content: `${youtube.notification.userFeedback.error.emoji} Fehler beim Entfernen des YouTube-Kanals.`,
+            content: `${youtubeNotificationFeedbackError.emoji} Fehler beim Entfernen des YouTube-Kanals.`,
             ephemeral: true,
           });
         }
@@ -158,7 +167,7 @@ export default {
           const channels = await getTrackedYouTubeChannels();
           if (channels.length === 0) {
             return interaction.reply({
-              content: `${youtube.notification.userFeedback.info.emoji} Keine überwachten YouTube-Kanäle vorhanden.`,
+              content: `${youtubeNotificationFeedbackInfo.emoji} Keine überwachten YouTube-Kanäle vorhanden.`,
               ephemeral: true,
             });
           }
@@ -176,13 +185,13 @@ export default {
             )
             .join("\n");
           return interaction.reply({
-            content: `${youtube.notification.userFeedback.list.emoji} Überwachte YouTube-Kanäle:\n${list}`,
+            content: `${youtubeNotificationFeedbackList.emoji} Überwachte YouTube-Kanäle:\n${list}`,
             ephemeral: true,
           });
         } catch (error) {
           console.error(error);
           return interaction.reply({
-            content: `${youtube.notification.userFeedback.error.emoji} Fehler beim Abrufen der überwachten Kanäle.`,
+            content: `${youtubeNotificationFeedbackError.emoji} Fehler beim Abrufen der überwachten Kanäle.`,
             ephemeral: true,
           });
         }
@@ -202,36 +211,36 @@ export default {
 
           if (!updated.success) {
             return interaction.reply({
-              content: `${youtube.notification.userFeedback.info.emoji} Der Kanal **${channelId}** wird nicht überwacht.`,
+              content: `${youtubeNotificationFeedbackInfo.emoji} Der Kanal **${channelId}** wird nicht überwacht.`,
               ephemeral: true,
             });
           }
 
           return interaction.reply({
-            content: `${youtube.notification.userFeedback.success.emoji} Benachrichtigungskanal für **${channelId}** wurde auf <#${notificationChannel.id}> geändert.`,
+            content: `${youtubeNotificationFeedbackSuccess.emoji} Benachrichtigungskanal für **${channelId}** wurde auf <#${notificationChannel.id}> geändert.`,
             ephemeral: true,
           });
         } catch (error) {
           console.error(error);
           return interaction.reply({
-            content: `${youtube.notification.userFeedback.error.emoji} Fehler beim Ändern des Benachrichtigungskanals.`,
+            content: `${youtubeNotificationFeedbackError.emoji} Fehler beim Ändern des Benachrichtigungskanals.`,
             ephemeral: true,
           });
         }
       }
-      if (subcommand === "music") {
-        const query = interaction.options.getString("query");
-        try {
-          const music = await searchMusic(query);
-          return interaction.reply(
-            `${youtube.music.emoji} **${music.title}**\n${youtube.music.userFeedback.link.emoji} https://www.youtube.com/watch?v=${music.id}`
-          );
-        } catch (error) {
-          console.error(error);
-          return interaction.reply(
-            `${youtube.music.userFeedback.error.emoji} Fehler beim Abrufen der YouTube-Musik.`
-          );
-        }
+    }
+    if (subcommand === "music") {
+      const query = interaction.options.getString("query");
+      try {
+        const music = await searchMusic(query);
+        return interaction.reply(
+          `${youtubeMusicEmoji} **${music.title}**\n${youtubeMusicFeedbackLink.emoji} https://www.youtube.com/watch?v=${music.id}`
+        );
+      } catch (error) {
+        console.error(error);
+        return interaction.reply(
+          `${youtubeMusicFeedbackError.emoji} Fehler beim Abrufen der YouTube-Musik.`
+        );
       }
     }
   },

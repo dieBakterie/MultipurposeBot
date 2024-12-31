@@ -1,4 +1,4 @@
-// src/services/YouTube/youtubeNotify.js
+// src/services/YouTube/notify.js
 // Importiere alle erforderlichen Module
 import { getLatestVideos } from "./youtube.js";
 import { listYouTubeChannels } from "../../database/youtubeDatabase.js";
