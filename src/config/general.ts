@@ -1,5 +1,4 @@
 // src/config/general.ts
-ral.js
 import dotenv from "dotenv";
 
 // Lade die Umgebungsvariablen

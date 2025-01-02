@@ -17,9 +17,7 @@
     "discord.js": "^14.16.3",
     "dotenv-safe": "^9.1.0",
     "pg": "^8.13.1",
-    "shoukaku": "^4.1.1",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.7.2",
+    "shoukaku": "github:shipgirlproject/Shoukaku#master",
     "winston": "^3.17.0"
   }
 }

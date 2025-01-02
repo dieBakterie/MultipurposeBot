@@ -1,5 +1,4 @@
 // src/config/docker.ts
-er.js
 import dotenv from "dotenv";
 
 // Lade die Umgebungsvariablen

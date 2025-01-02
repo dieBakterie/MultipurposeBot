@@ -7,8 +7,8 @@ const rootDir = "./"; // Aktuelles Verzeichnis
 
 // Ausschlusskriterien
 const excludedDirs = [".git", "node_modules"];
-const excludedFiles = [];
-const excludedExtensions = [".lock", ".json"];
+const excludedFiles = [".git"];
+const excludedExtensions = [".lock", ".json", ".git", ".log"];
 
 // Kommentarzeichen für verschiedene Dateitypen
 const commentFormats = {
@@ -175,3 +175,4 @@ function processDirectory(directory) {
 
 // Starte die Verarbeitung
 processDirectory(rootDir);
+

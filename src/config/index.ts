@@ -1,5 +1,4 @@
 // src/config/index.ts
-x.js
 
 // Importiere alle Konfigurationsmodule
 import database from "./database.js";

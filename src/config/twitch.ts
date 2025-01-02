@@ -1,5 +1,4 @@
 // src/config/twitch.ts
-ch.js
 import dotenv from "dotenv";
 
 // Lade die Umgebungsvariablen

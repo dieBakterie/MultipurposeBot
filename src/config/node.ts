@@ -1,5 +1,4 @@
 // src/config/node.ts
-.js
 import dotenv from "dotenv";
 
 // Lade die Umgebungsvariablen

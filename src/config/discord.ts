@@ -1,5 +1,4 @@
 // src/config/discord.ts
-ord.js
 import dotenv from "dotenv";
 
 // Lade die Umgebungsvariablen

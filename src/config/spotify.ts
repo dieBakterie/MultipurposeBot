@@ -1,5 +1,4 @@
 // src/config/spotify.ts
-ify.js
 import dotenv from "dotenv";
 
 // Lade die Umgebungsvariablen

@@ -1,5 +1,4 @@
 // src/index.ts
-// src/index.js
 import {
   Client,
   GatewayIntentBits,
@@ -43,12 +42,60 @@ export const client = new Client({
   ],
 });
 
+// Dynamische Host/Port-Logik: Prüfen, ob im Docker-Container läuft
+let dynamiclavaLinkHost;
+let dynamiclavaLinkPort;
+
+if (isDocker === "true") {
+  console.log("Docker-Container erkannt.");
+  dynamiclavaLinkHost = "lavaLink";
+  dynamiclavaLinkPort = 2333;
+}
+
+// Fallback-Logik
+const finalLavaLinkHost = dynamiclavaLinkHost || lavaLinkHost;
+const finalLavaLinkPort = dynamiclavaLinkPort || lavaLinkPort;
+
+// Shoukaku-Setup
+export const LavalinkNodes = [
+  {
+    name: "MainNode",
+    url: `${finalLavaLinkHost}:${finalLavaLinkPort}`,
+    auth: lavaLinkPassword || "",
+  },
+];
+
+export const shoukaku = new Shoukaku(
+  new Connectors.DiscordJS(client),
+  LavalinkNodes,
+  {
+    moveOnDisconnect: false,
+    resume: true,
+    reconnectTries: 5,
+    reconnectInterval: 5000,
+  }
+);
+
+// Shoukaku-Events
+shoukaku.on("ready", (name) =>
+  console.log(`Lavalink Node ${name} ist bereit!`)
+);
+shoukaku.on("error", (name, error) =>
+  console.error(`Lavalink Node ${name} hat einen Fehler:`, error)
+);
+shoukaku.on("close", (name, code, reason) =>
+  console.warn(`Lavalink Node ${name} wurde geschlossen:`, { code, reason })
+);
+shoukaku.on("disconnect", (name, count, moved) =>
+  console.warn(`Lavalink Node ${name} wurde getrennt. Players: ${count}. Moved: ${moved}`)
+);
+
 // Initialisiere die Map für erwartete Nachrichten
 client.expectedMessages = new Map();
 client.commands = new Collection();
 
 // Funktion zum rekursiven Laden von Dateien
-function loadFilesRecursively(directory, fileExtension = ".js") {
+function loadFilesRecursively(directory: string, fileExtension = ".js") {
   let files = [];
   const entries = fs.readdirSync(directory, { withFileTypes: true });
 
@@ -131,56 +178,6 @@ async function logCommandOrEvent(fileURL, name, client, db, type) {
     );
   }
 }
-
-// Dynamische Host/Port-Logik: Prüfen, ob im Docker-Container läuft
-let dynamiclavaLinkHost;
-let dynamiclavaLinkPort;
-
-if (isDocker === "true") {
-  console.log("Docker-Container erkannt.");
-  dynamiclavaLinkHost = "lavaLink";
-  dynamiclavaLinkPort = 2333;
-}
-
-// Fallback-Logik
-const finalLavaLinkHost = dynamiclavaLinkHost || lavaLinkHost;
-const finalLavaLinkPort = dynamiclavaLinkPort || lavaLinkPort;
-
-// Shoukaku-Setup
-export const LavalinkNodes = [
-  {
-    name: "MainNode",
-    url: `${finalLavaLinkHost}:${finalLavaLinkPort}`,
-    auth: lavaLinkPassword,
-  },
-];
-
-export const shoukaku = new Shoukaku(
-  new Connectors.DiscordJS(client),
-  LavalinkNodes,
-  {
-    moveOnDisconnect: false,
-    resume: true,
-    reconnectTries: 5,
-    reconnectInterval: 5000,
-  }
-);
-
-// Shoukaku-Events
-shoukaku.on("ready", (name) =>
-  console.log(`Lavalink Node ${name} ist bereit!`)
-);
-shoukaku.on("error", (name, error) =>
-  console.error(`Lavalink Node ${name} hat einen Fehler:`, error)
-);
-shoukaku.on("close", (name, code, reason) =>
-  console.warn(`Lavalink Node ${name} wurde geschlossen:`, { code, reason })
-);
-shoukaku.on("disconnect", (name, players, moved) =>
-  console.warn(
-    `Lavalink Node ${name} wurde getrennt. Players: ${players.size}. Moved: ${moved}`
-  )
-);
 
 // Startet den Bot
 async function startBot() {

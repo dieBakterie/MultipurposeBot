@@ -1,5 +1,4 @@
 // src/config/youtube.ts
-ube.js
 import dotenv from "dotenv";
 
 // Lade die Umgebungsvariablen
