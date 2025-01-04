@@ -29,6 +29,58 @@ const general = {
       emoji: "🔗",
       // message: "",
     },
+    loading: {
+      emoji: "🔄",
+      // message: "",
+    },
+    offline: {
+      emoji: "🔴",
+      // message: "",
+    },
+    online: {
+      emoji: "🟢",
+      // message: "",
+    },
+    stream: {
+      emoji: "📺",
+      // message: "",
+    },
+    video: {
+      emoji: "🎬",
+      // message: "",
+    },
+    game: {
+      emoji: "🎮",
+      // message: "",
+    },
+    user: {
+      emoji: "👤",
+      // message: "",
+    },
+    channel: {
+      emoji: "📡",
+      // message: "",
+    },
+    viewer: {
+      emoji: "👀",
+      // message: "",
+    },
+    follower: {
+      emoji: "👥",
+      // message: "",
+    },
+    subscriber: {
+      emoji: "🎉",
+      // message: "",
+    },
+    next: {
+      emoji: "▶",
+      // message: "",
+    },
+    previous: {
+      emoji: "◀",
+      // message: "",
+    },
   },
   // Einstellungen Generell: Musik
   music: {
@@ -62,6 +114,11 @@ const general = {
       skip: "⏭",
       stop: "⏹",
     },
+  },
+  // Einstellungen Generell: Benachrichtigungen
+  notification: {
+    emoji: "📢",
+    // message: "",
   },
 };
 

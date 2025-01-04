@@ -1,61 +1,186 @@
 // src/services/Twitch/checkTwitchLive.js
-import { getTwitchStreamDetails, searchStreamer } from "./twitch.js";
+
+import pkg from "discord.js";
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = pkg;
 import {
-  getTrackedTwitchChannels,
+  getCachedTrackedStreamers,
   updateStreamerInfo,
 } from "../../database/twitchDatabase.js";
+import { getTwitchStreamerDetails, getTwitchStreamDetails } from "./twitch.js";
 
-const streamStatus = {}; // Status der Streamer
-
-// Funktion zum Überprüfen der Stream-Status
-export async function checkTwitchLive(client) {
+/**
+ * Sendet eine Live-Benachrichtigung in einen Discord-Kanal, wenn ein Twitch-Streamer
+ * online geht.
+ * @param {TextChannel} channel - Discord-Kanal, in den die Benachrichtigung
+ *   gesendet werden soll.
+ * @param {Object} streamDetails - Twitch-Stream-Daten.
+ * @param {Object} userDetails - Twitch-Streamer-Daten.
+ * @returns {Promise<Message>} - Die gesendete Nachricht oder null, wenn ein Fehler
+ *   aufgetreten ist.
+ */
+async function sendLiveNotification(channel, streamDetails, userDetails) {
   try {
-    // Hole alle getrackten Streamer mit ihren Twitch-IDs und Discord-Kanälen
-    const trackedStreamers = await getTrackedTwitchChannels(); // Format: [{ user_id, discord_channel_id }]
+    const twitchLink = `https://www.twitch.tv/${userDetails.login}`;
 
-    for (const { userId, discordChannelId } of trackedStreamers) {
-      const streamDetails = await getTwitchStreamDetails(userId);
-      const currentlyLive = !!streamDetails;
-
-      // Aktualisiere `user_name` und `display_name`, falls sie sich geändert haben
-      const streamerDetails = await searchStreamer(userId);
-      if (streamerDetails) {
-        await updateStreamerInfo(userId, streamerDetails);
-      }
-
-      // Initialisiere den Status, falls nicht vorhanden
-      if (!streamStatus[userId]) {
-        streamStatus[userId] = { online: false, lastMessage: null };
-      }
-
-      // Falls der Streamer live ist und noch nicht als "online" markiert ist
-      if (currentlyLive && !streamStatus[userId].online) {
-        const channel = client.channels.cache.get(discordChannelId);
-        if (!channel) {
-          console.error(`Kanal mit ID ${discordChannelId} nicht gefunden.`);
-          continue;
+    const liveEmbed = new EmbedBuilder()
+      .setColor(0x6441a5)
+      .setTitle(`${userDetails.display_name} ist jetzt live auf Twitch!`)
+      .setDescription(
+        `**Titel:** ${streamDetails.title || "Kein Titel verfügbar"}`
+      )
+      .setThumbnail(userDetails.profile_image_url)
+      .addFields(
+        {
+          name: "Spiel",
+          value: streamDetails.game_name || "Kein Spiel angegeben",
+          inline: true,
+        },
+        {
+          name: "Viewer",
+          value: `${streamDetails.viewer_count || 0}`,
+          inline: true,
         }
+      )
+      .setURL(twitchLink)
+      .setFooter({
+        text: "Twitch Live-Benachrichtigung",
+        iconURL: "https://www.twitch.tv/favicon.ico",
+      })
+      .setTimestamp();
 
-        streamStatus[userId].online = true;
-        const title = streamDetails.title;
+    const watchButton = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Watch Stream")
+        .setStyle(ButtonStyle.Link)
+        .setURL(twitchLink)
+    );
 
-        // Sende die Live-Benachrichtigung
-        streamStatus[userId].lastMessage = await channel.send(
-          `<@&${streamDetails.user_id}> ist jetzt live auf Twitch!\n**Titel:** ${title}\nSchau es dir an: https://www.twitch.tv/${streamDetails.user_name}`
-        );
-      }
-      // Falls der Streamer offline ist und vorher als "online" markiert war
-      else if (!currentlyLive && streamStatus[userId].online) {
-        streamStatus[userId].online = false;
+    const sentMessage = await channel.send({
+      content: `<@&${userDetails.id}> ist jetzt live!`,
+      embeds: [liveEmbed],
+      components: [watchButton],
+    });
 
-        // Lösche die vorherige Nachricht
-        if (streamStatus[userId].lastMessage) {
-          await streamStatus[userId].lastMessage.delete();
-          streamStatus[userId].lastMessage = null;
-        }
-      }
+    return sentMessage;
+  } catch (error) {
+    console.error("Fehler beim Senden der Live-Benachrichtigung:", error);
+    return null; // Klare Rückgabe bei Fehlern
+  }
+}
+
+const streamStatusCache = new Map(); // Temporärer Cache
+
+/**
+ * Verarbeitet den aktuellen Stream-Status eines Twitch-Streamers und aktualisiert
+ * den Benachrichtigungsstatus im Discord-Kanal.
+ *
+ * @param {Client} client - Der Discord-Client.
+ * @param {string} userId - Die Twitch-Benutzer-ID des Streamers.
+ * @param {string} discordChannelId - Die ID des Discord-Kanals, in dem Benachrichtigungen
+ *   gesendet werden sollen.
+ * @param {boolean} currentlyLive - Gibt an, ob der Streamer aktuell live ist.
+ * @param {Object} streamDetails - Die Details des aktuellen Twitch-Streams.
+ * @param {Object} userDetails - Die Details des Twitch-Streamers.
+ */
+async function processStreamStatus(
+  client,
+  userId,
+  discordChannelId,
+  currentlyLive,
+  streamDetails,
+  userDetails
+) {
+  if (!streamStatusCache.has(userId)) {
+    streamStatusCache.set(userId, { online: false, lastMessage: null });
+  }
+
+  const status = streamStatusCache.get(userId);
+
+  if (currentlyLive && !status.online) {
+    const channel = client.channels.cache.get(discordChannelId);
+    if (!channel || !channel.permissionsFor(client.user).has("SendMessages"))
+      return;
+
+    const sentMessage = await sendLiveNotification(
+      channel,
+      streamDetails,
+      userDetails
+    );
+    if (sentMessage) {
+      streamStatusCache.set(userId, { online: true, lastMessage: sentMessage });
     }
+  } else if (!currentlyLive && status.online) {
+    if (status.lastMessage) {
+      await status.lastMessage.delete();
+    }
+    streamStatusCache.set(userId, { online: false, lastMessage: null });
+  }
+}
+
+/**
+ * Überprüft alle Twitch-Streamer, die in der Datenbank registriert sind,
+ * auf Änderungen ihres Status (online/offline).
+ * @param {Client} client - Der Discord-Client.
+ * @returns {Promise<void>}
+ */
+async function checkTwitchLive(client) {
+  try {
+    // Verwende den Cache, um die Streamer abzurufen
+    const trackedStreamers = await getCachedTrackedStreamers();
+    console.log(`Überprüfe ${trackedStreamers.length} Twitch-Streamer...`);
+
+    if (!trackedStreamers.length) {
+      console.log("Keine Twitch-Streamer zum Überprüfen gefunden.");
+      return;
+    }
+
+    const userDetailsCache = new Map();
+
+    await Promise.all(
+      trackedStreamers.map(async ({ userId, discordChannelId }) => {
+        try {
+          // Nutzer-Details aus dem Cache oder API abrufen
+          const userDetails =
+            userDetailsCache.get(userId) ||
+            (await getTwitchStreamerDetails(userId));
+
+          if (!userDetails) {
+            console.warn(`Kein Benutzer mit ID ${userId} gefunden.`);
+            return;
+          }
+          userDetailsCache.set(userId, userDetails);
+
+          const streamDetails = await getTwitchStreamDetails(userId);
+          const currentlyLive = !!streamDetails;
+
+          await updateStreamerInfo(userId, {
+            user_name: userDetails.login,
+            display_name: userDetails.display_name,
+          });
+
+          await processStreamStatus(
+            client,
+            userId,
+            discordChannelId,
+            currentlyLive,
+            streamDetails,
+            userDetails
+          );
+
+          console.log(
+            `Streamer ${userDetails.display_name} (ID: ${userId}) erfolgreich verarbeitet.`
+          );
+        } catch (error) {
+          console.error(
+            `Fehler beim Verarbeiten von Streamer ${userId} (${discordChannelId}):`,
+            error
+          );
+        }
+      })
+    );
   } catch (error) {
     console.error("Fehler beim Überprüfen der Twitch-Streamer:", error);
   }
 }
+
+export default checkTwitchLive;

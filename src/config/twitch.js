@@ -9,6 +9,7 @@ const twitch = {
   // emoji: "",
   clientId: process.env.TWITCH_CLIENT_ID,
   clientSecret: process.env.TWITCH_CLIENT_SECRET,
+  // Einstellungen Twitch: Benutzer-Feedback
   userFeedback: {
     // emoji: "",
     error: {
@@ -31,6 +32,63 @@ const twitch = {
       emoji: "🔗",
       // message: "",
     },
+    loading: {
+      emoji: "🔄",
+      // message: "",
+    },
+    offline: {
+      emoji: "🔴",
+      // message: "",
+    },
+    online: {
+      emoji: "🟢",
+      // message: "",
+    },
+    stream: {
+      emoji: "📺",
+      // message: "",
+    },
+    video: {
+      emoji: "🎬",
+      // message: "",
+    },
+    game: {
+      emoji: "🎮",
+      // message: "",
+    },
+    user: {
+      emoji: "👤",
+      // message: "",
+    },
+    channel: {
+      emoji: "📡",
+      // message: "",
+    },
+    viewer: {
+      emoji: "👀",
+      // message: "",
+    },
+    follower: {
+      emoji: "👥",
+      // message: "",
+    },
+    subscriber: {
+      emoji: "🎉",
+      // message: "",
+    },
+    next: {
+      emoji: "▶",
+      // message: "",
+    },
+    previous: {
+      emoji: "◀",
+      // message: "",
+    },
+  },
+  // Einstellungen Twitch: Benachrichtigungen
+  notification: {
+    emoji: "📢",
+    // message: "",
   },
 };
 

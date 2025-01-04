@@ -1,8 +1,15 @@
 // src/commands/YouTube/youtube.js
 // Importiere die erforderlichen Module
-import { SlashCommandBuilder } from "discord.js";
+import pkg from "discord.js";
+const {
+  SlashCommandBuilder,
+  ButtonBuilder,
+  ActionRowBuilder,
+  EmbedBuilder,
+  ChannelType,
+} = pkg;
 import { getLatestVideos } from "../../services/YouTube/youtube.js";
-import { searchMusic } from "../../services/YouTube/music.js";
+import searchMusic from "../../services/YouTube/music.js";
 import {
   addYouTubeChannel,
   removeYouTubeChannel,
@@ -17,6 +24,8 @@ import {
   youtubeMusicEmoji,
   youtubeMusicFeedbackError,
   youtubeMusicFeedbackLink,
+  youtubeFeedbackNext,
+  youtubeFeedbackPrevious,
 } from "../../alias.js";
 
 export default {
@@ -44,6 +53,7 @@ export default {
                   "Der Discord-Kanal für Benachrichtigungen zu neuen Videos."
                 )
                 .setRequired(true)
+                .addChannelTypes(ChannelType.GuildText)
             )
             .addStringOption((option) =>
               option
@@ -89,6 +99,7 @@ export default {
                   "Der neue Discord-Kanal für Benachrichtigungen."
                 )
                 .setRequired(true)
+                .addChannelTypes(ChannelType.GuildText)
             )
         )
         .addSubcommand((sub) =>
@@ -119,7 +130,7 @@ export default {
             });
           }
 
-          await addYouTubeChannel(
+          const result = await addYouTubeChannel(
             channelId,
             channelName,
             latestVideos[0].id,
@@ -128,7 +139,7 @@ export default {
           );
 
           return interaction.reply({
-            content: `${youtubeNotificationFeedbackSuccess.emoji} Der YouTube-Kanal **${channelName}**(Kanal-ID: **${channelId}**) wird jetzt überwacht. Benachrichtigungen werden an <#${notificationChannel.id}> gesendet.`,
+            content: `${result.success ? youtubeNotificationFeedbackSuccess.emoji : youtubeNotificationFeedbackError.emoji} ${result.message} Benachrichtigungen werden an <#${notificationChannel.id}> gesendet.`,
             ephemeral: true,
           });
         } catch (error) {
@@ -142,15 +153,16 @@ export default {
 
       if (subcommand === "remove") {
         try {
-          const removed = await removeYouTubeChannel(channelName || channelId);
-          if (!removed) {
+          const result = await removeYouTubeChannel(channelName || channelId);
+          if (!result.success) {
             return interaction.reply({
               content: `${youtubeNotificationFeedbackInfo.emoji} Dieser Kanal wird nicht überwacht.`,
               ephemeral: true,
             });
           }
+
           return interaction.reply({
-            content: `${youtubeNotificationFeedbackSuccess.emoji} Überwachung für diesen Kanal entfernt.`,
+            content: `${result.success ? youtubeNotificationFeedbackSuccess.emoji : youtubeNotificationFeedbackError.emoji} ${result.message}`,
             ephemeral: true,
           });
         } catch (error) {
@@ -162,36 +174,117 @@ export default {
         }
       }
 
-      if (subcommand === "list") {
+      if (subcommand == "list") {
         try {
-          const channels = await getTrackedYouTubeChannels();
-          if (channels.length === 0) {
+          const youtuberList = await getTrackedYouTubeChannels();
+
+          if (youtuberList.length === 0) {
             return interaction.reply({
-              content: `${youtubeNotificationFeedbackInfo.emoji} Keine überwachten YouTube-Kanäle vorhanden.`,
+              content: `${youtubeNotificationFeedbackInfo.emoji} Es sind keine Streamer gespeichert.`,
               ephemeral: true,
             });
           }
 
-          const list = channels
-            .map(
-              (channel) =>
-                `- **Kanal-ID:** ${
-                  channel.user_id
-                }\n  - **Benachrichtigungen:** ${
-                  channel.discord_channel_id
-                    ? `<#${channel.discord_channel_id}>`
-                    : "Kein Kanal"
-                }\n  - **Letztes Video-ID:** ${channel.latest_video_id}`
+          if (youtuberList.length > 10) {
+            const itemsPerPage = 10;
+            const totalPages = Math.ceil(youtuberList.length / itemsPerPage);
+            let currentPage = 0;
+
+            const generateEmbed = (page) => {
+              const start = page * itemsPerPage;
+              const end = start + itemsPerPage;
+              const pageItems = youtuberList.slice(start, end);
+
+              return new EmbedBuilder()
+                .setTitle(
+                  `${youtubeNotificationFeedbackList.emoji} Liste der Twitch-Streamer`
+                )
+                .setDescription(
+                  pageItems
+                    .map(
+                      (streamer, index) =>
+                        `**${start + index + 1}.** ${
+                          streamer.streamerName
+                        } (Kanal: ${
+                          streamer.discordChannelId
+                            ? `<#${streamer.discordChannelId}>`
+                            : "Kein Kanal"
+                        })`
+                    )
+                    .join("\n")
+                )
+                .setFooter({ text: `Seite ${page + 1} von ${totalPages}` });
+            };
+
+            const embed = generateEmbed(currentPage);
+
+            const buttons = new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId("prev")
+                .setLabel(`${youtubeFeedbackPrevious.emoji}`)
+                .setStyle(ButtonStyle.Primary),
+              new ButtonBuilder()
+                .setCustomId("next")
+                .setLabel(`${youtubeFeedbackNext.emoji}`)
+                .setStyle(ButtonStyle.Primary)
+            );
+
+            const reply = await interaction.reply({
+              embeds: [embed],
+              components: [buttons],
+              fetchReply: true,
+            });
+
+            const collector = reply.createMessageComponentCollector({
+              filter: (i) => i.user.id === interaction.user.id,
+              time: 60000,
+            });
+
+            collector.on("collect", async (i) => {
+              if (i.customId === "prev") {
+                currentPage = (currentPage - 1 + totalPages) % totalPages;
+              } else if (i.customId === "next") {
+                currentPage = (currentPage + 1) % totalPages;
+              }
+
+              await i.update({
+                embeds: [generateEmbed(currentPage)],
+              });
+            });
+
+            collector.on("end", () => {
+              reply.edit({ components: [] }).catch(console.error);
+            });
+
+            return;
+          }
+
+          // Liste ohne Seiten, wenn weniger als 10 Streamer
+          const embed = new EmbedBuilder()
+            .setTitle(
+              `${youtubeNotificationFeedbackList.emoji} Liste der YouTuber`
             )
-            .join("\n");
-          return interaction.reply({
-            content: `${youtubeNotificationFeedbackList.emoji} Überwachte YouTube-Kanäle:\n${list}`,
-            ephemeral: true,
-          });
+            .setDescription(
+              youtuberList
+                .map(
+                  (streamer, index) =>
+                    `**${index + 1}.** ${streamer.streamerName} (Kanal: ${
+                      streamer.discordChannelId
+                        ? `<#${streamer.discordChannelId}>`
+                        : "Kein Kanal"
+                    })`
+                )
+                .join("\n")
+            );
+
+          return interaction.reply({ embeds: [embed] });
         } catch (error) {
-          console.error(error);
+          console.error(
+            `${youtubeNotificationFeedbackError.emoji} Fehler beim Abrufen der YouTuber-Liste:`,
+            error
+          );
           return interaction.reply({
-            content: `${youtubeNotificationFeedbackError.emoji} Fehler beim Abrufen der überwachten Kanäle.`,
+            content: `${youtubeNotificationFeedbackError.emoji} Fehler beim Abrufen der YouTuber-Liste.`,
             ephemeral: true,
           });
         }
@@ -229,6 +322,7 @@ export default {
         }
       }
     }
+
     if (subcommand === "music") {
       const query = interaction.options.getString("query");
       try {

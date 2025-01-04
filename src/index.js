@@ -8,10 +8,8 @@ import {
 } from "discord.js";
 import fs from "fs";
 import path from "path";
-import { pathToFileURL } from "url";
 import { Shoukaku, Connectors } from "shoukaku";
-import { db } from "./database/database.js";
-import { log } from "./utils/logging.js";
+import { syncChannelNames } from "./database/twitchDatabase.js";
 import {
   discordToken,
   discordClientId,
@@ -45,25 +43,12 @@ export const client = new Client({
 client.expectedMessages = new Map();
 client.commands = new Collection();
 
-// Dynamische Host/Port-Logik: Prüfen, ob im Docker-Container läuft
-let dynamiclavaLinkHost;
-let dynamiclavaLinkPort;
-
-if (isDocker === "true") {
-  console.log("Docker-Container erkannt.");
-  dynamiclavaLinkHost = "lavaLink";
-  dynamiclavaLinkPort = 2333;
-}
-
-// Fallback-Logik
-const finalLavaLinkHost = dynamiclavaLinkHost || lavaLinkHost;
-const finalLavaLinkPort = dynamiclavaLinkPort || lavaLinkPort;
-
 // Shoukaku-Setup
+const resolvedLavaLinkHost = isDocker === "true" ? "lavaLink" : lavaLinkHost;
 export const LavalinkNodes = [
   {
     name: "MainNode",
-    url: `${finalLavaLinkHost}:${finalLavaLinkPort}`,
+    url: `${resolvedLavaLinkHost}:${lavaLinkPort}`,
     auth: lavaLinkPassword,
   },
 ];
@@ -78,6 +63,8 @@ export const shoukaku = new Shoukaku(
     reconnectInterval: 5000,
   }
 );
+
+client.shoukaku = shoukaku;
 
 // Shoukaku-Events
 shoukaku.on("ready", (name) =>
@@ -97,7 +84,7 @@ shoukaku.on("disconnect", (name, players, moved) =>
 
 // Funktion zum Laden von Commands und Events
 async function loadFilesRecursively(directory, type) {
-  const files = fs.readdirSync(directory, { withFileTypes: true });
+  const files = await fs.promises.readdir(directory, { withFileTypes: true });
 
   const filePaths = [];
 
@@ -120,26 +107,59 @@ async function loadFilesRecursively(directory, type) {
 
 // Funktion zur Registrierung der Commands bei Discord
 async function registerCommandsAndEvents() {
-  const commandData = client.commands.map((command) => command.data.toJSON());
-
-  const rest = new REST({ version: "10" }).setToken(discordToken);
-
   try {
-    console.log("Registriere Slash-Befehle bei Discord...");
+    // Commands laden
+    console.log("Lade Commands...");
+    const commandFiles = await loadFilesRecursively(
+      path.resolve(__dirname, "./commands"),
+      "command"
+    );
+    for (const file of commandFiles) {
+      const command = (await import(`file://${file}`)).default;
+      if (command?.data && command?.execute) {
+        client.commands.set(command.data.name, command);
+        console.log(`Command geladen: ${command.data.name}`);
+      } else {
+        console.warn(`Überspringe ungültigen Command in Datei: ${file}`);
+      }
+    }
 
+    // Registriere die Commands bei Discord
+    console.log("Registriere Commands bei Discord...");
+    const commandData = client.commands.map((command) => command.data.toJSON());
+    const rest = new REST({ version: "10" }).setToken(discordToken);
     await rest.put(
       Routes.applicationGuildCommands(discordClientId, discordGuildId),
       {
         body: commandData,
       }
     );
-
     console.log(
-      `${discordFeedbackSuccess.emoji} Slash-Befehle erfolgreich registriert!`
+      `${discordFeedbackSuccess.emoji} Commands erfolgreich registriert!`
     );
+
+    // Events laden
+    console.log("Lade Events...");
+    const eventFiles = await loadFilesRecursively(
+      path.resolve(__dirname, "./events"),
+      "event"
+    );
+    for (const file of eventFiles) {
+      const event = (await import(`file://${file}`)).default;
+      if (event?.name && event?.execute) {
+        if (event.once) {
+          client.once(event.name, (...args) => event.execute(...args, client));
+        } else {
+          client.on(event.name, (...args) => event.execute(...args, client));
+        }
+        console.log(`Event geladen: ${event.name}`);
+      } else {
+        console.warn(`Überspringe ungültiges Event in Datei: ${file}`);
+      }
+    }
   } catch (error) {
     console.error(
-      `${discordFeedbackError.emoji} Fehler bei der Registrierung der Slash-Befehle:`,
+      `${discordFeedbackError.emoji} Fehler bei der Registrierung der Commands und Events:`,
       error
     );
   }
@@ -150,19 +170,7 @@ async function startBot() {
   try {
     console.log("Starte den Bot...");
 
-    // Commands laden
-    console.log("Lade Commands...");
-    await loadFilesRecursively(
-      path.resolve(__dirname, "./commands"),
-      "command"
-    );
-
-    // Events laden
-    console.log("Lade Events...");
-    await loadFilesRecursively(path.resolve(__dirname, "./events"), "event");
-
-    // Commands bei Discord registrieren
-    console.log("Registriere Commands bei Discord...");
+    // Commands und Events laden und registrieren
     await registerCommandsAndEvents();
 
     // Bot-Login

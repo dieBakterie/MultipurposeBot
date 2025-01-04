@@ -1,5 +1,5 @@
 // src/events/ready.js
-import { checkTwitchLive } from "../services/Twitch/checkTwitchLive.js";
+import checkTwitchLive from "../services/Twitch/checkTwitchLive.js";
 import { logAndThrowError } from "../utils/helpers.js";
 
 export default {

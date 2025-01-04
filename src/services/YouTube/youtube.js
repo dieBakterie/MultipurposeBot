@@ -1,22 +1,12 @@
 // src/services/YouTube/youtube.js
 import APIManager from "../../utils/apiManager.js";
+import { handleAxiosError } from "../../utils/helpers.js";
 import { youtubeFeedbackError, youtubeApiKey } from "../../alias.js";
 
 const YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3";
 
 // Create APIManager instance
 const youtubeApi = new APIManager(YOUTUBE_API_BASE_URL);
-
-/**
- * Utility-Funktion zur Fehlerbehandlung
- * @param {string} emoji - Emoji zur Darstellung des Fehlers
- * @param {Error} error - Der aufgetretene Fehler
- * @param {string} message - Benutzerdefinierte Fehlermeldung
- */
-function handleYouTubeError(emoji, error, message) {
-  const detailedMessage = error.response?.data?.error?.message || error.message;
-  throw new Error(`${emoji} ${message}: ${detailedMessage}`);
-}
 
 /**
  * Validiert einen YouTube-Kanal
@@ -45,7 +35,7 @@ export async function validateYouTubeChannel(channelId) {
       description: channel.snippet.description,
     };
   } catch (error) {
-    handleYouTubeError(
+    handleAxiosError(
       youtubeFeedbackError.emoji,
       error,
       "Fehler bei der Kanalvalidierung"
@@ -78,7 +68,7 @@ export async function searchVideos(query, maxResults = 5) {
       channelTitle: item.snippet.channelTitle,
     }));
   } catch (error) {
-    handleYouTubeError(
+    handleAxiosError(
       youtubeFeedbackError.emoji,
       error,
       "Fehler bei der Videosuche"
@@ -112,7 +102,7 @@ export async function getLatestVideos(channelId, maxResults = 5) {
       publishedAt: item.snippet.publishedAt,
     }));
   } catch (error) {
-    handleYouTubeError(
+    handleAxiosError(
       youtubeFeedbackError.emoji,
       error,
       "Fehler beim Abrufen der neuesten Videos"

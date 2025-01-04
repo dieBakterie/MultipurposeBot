@@ -1,50 +1,43 @@
 // src/database/youtubeDatabase.js
-import { db } from "./database.js";
-import { logAndThrowError } from "../utils/helpers.js";
+import { executeQuery } from "../utils/databaseUtils.js";
+import { createSuccessResponse, logAndThrowError } from "../utils/helpers.js";
+import { validateValue, validateFields } from "../utils/validation.js";
+import { youtubeFeedbackError, youtubeFeedbackSuccess } from "../alias.js";
 
 /**
  * Fügt einen YouTube-Kanal hinzu oder aktualisiert den neuesten Video-Status
  */
 export async function addYouTubeChannel(
-  userName,
   userId,
+  userName,
   latestVideoId,
-  discordChannelId = null,
-  discordChannelName = null
+  discordChannelId,
+  discordChannelName
 ) {
-  if (!userName || typeof userName !== "string") {
-    throw new Error("Der Benutzername muss ein gültiger String sein.");
-  }
+  validateFields({
+    user_id: userId,
+    user_name: userName,
+    latest_video_id: latestVideoId,
+    discord_channel_id: discordChannelId,
+    discord_channel_name: discordChannelName
+  });
 
   try {
-    const query = `
-      INSERT INTO youtubers (user_id, user_name, latest_video_id, discord_channel_id, discord_channel_name, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT (user_id) DO UPDATE SET
-        user_name = EXCLUDED.user_name,
-        latest_video_id = EXCLUDED.latest_video_id,
-        discord_channel_id = COALESCE(EXCLUDED.discord_channel_id, youtubers.discord_channel_id),
-        discord_channel_name = COALESCE(EXCLUDED.discord_channel_name, youtubers.discord_channel_name),
-        updated_at = CURRENT_TIMESTAMP
-      RETURNING *;
-    `;
-    const result = await db.query(query, [
-      userId,
-      userName,
-      latestVideoId,
-      discordChannelId,
-      discordChannelName,
-    ]);
-    return {
-      success: true,
-      data: result.rows[0],
-      message: `YouTube-Kanal "${userName}" erfolgreich hinzugefügt oder aktualisiert.`,
-    };
+    const result = await executeQuery('INSERT', 'youtubers', {
+      user_id: userId,
+      user_name: userName,
+      latest_video_id: latestVideoId,
+      discord_channel_id: discordChannelId,
+      discord_channel_name: discordChannelName,
+      created_at: 'CURRENT_TIMESTAMP',
+      updated_at: 'CURRENT_TIMESTAMP'
+    }, {}, {
+      target: 'user_id',
+      action: 'UPDATE SET user_name = EXCLUDED.user_name, latest_video_id = EXCLUDED.latest_video_id'
+    });
+    return createSuccessResponse(true, result.rows[0], `${youtubeFeedbackSuccess.emoji} YouTube-Kanal "${userName}" erfolgreich hinzugefügt oder aktualisiert.`);
   } catch (error) {
-    logAndThrowError(
-      `Fehler beim Hinzufügen oder Aktualisieren des YouTube-Kanals "${userName}"`,
-      error
-    );
+    logAndThrowError(youtubeFeedbackError.emoji, `Fehler beim Hinzufügen oder Aktualisieren des YouTube-Kanals "${userName}"`, error);
   }
 }
 
@@ -56,40 +49,28 @@ export async function setDiscordChannelForYouTubeChannel(
   discordChannelId,
   discordChannelName
 ) {
-  if (!userName || typeof userName !== "string") {
-    throw new Error("Der Benutzername muss ein gültiger String sein.");
-  }
+  validateFields({
+    user_name: userName,
+    discord_channel_id: discordChannelId,
+    discord_channel_name: discordChannelName
+  });
 
   try {
-    const query = `
-      UPDATE youtubers
-      SET discord_channel_id = $1, discord_channel_name = $2, updated_at = CURRENT_TIMESTAMP
-      WHERE user_name = $3
-      RETURNING *;
-    `;
-    const result = await db.query(query, [
-      discordChannelId,
-      discordChannelName,
-      userName,
-    ]);
+    const result = await executeQuery('UPDATE', 'youtubers', {
+      discord_channel_id: discordChannelId,
+      discord_channel_name: discordChannelName,
+      updated_at: 'CURRENT_TIMESTAMP'
+    }, {
+      user_name: userName
+    });
 
     if (result.rowCount === 0) {
-      return {
-        success: false,
-        message: `YouTube-Kanal "${userName}" nicht gefunden.`,
-      };
+      return createSuccessResponse(false, `YouTube-Kanal "${userName}" nicht gefunden.`);
     }
 
-    return {
-      success: true,
-      data: result.rows[0],
-      message: `Discord-Kanal für "${userName}" erfolgreich aktualisiert.`,
-    };
+    return createSuccessResponse(true, `${youtubeFeedbackSuccess.emoji} Discord-Kanal für "${userName}" erfolgreich aktualisiert.`, result.rows[0]);
   } catch (error) {
-    logAndThrowError(
-      `Fehler beim Setzen des Discord-Kanals für "${userName}"`,
-      error
-    );
+    logAndThrowError(youtubeFeedbackError.emoji, `Fehler beim Setzen des Discord-Kanals für "${userName}"`, error);
   }
 }
 
@@ -97,29 +78,14 @@ export async function setDiscordChannelForYouTubeChannel(
  * Entfernt einen YouTube-Kanal aus der Datenbank
  */
 export async function removeYouTubeChannel(userName) {
+  validateValue(userName, "user_name");
   try {
-    const query = `
-      DELETE FROM youtubers
-      WHERE user_name = $1;
-    `;
-    const result = await db.query(query, [userName]);
-
-    if (result.rowCount === 0) {
-      return {
-        success: false,
-        message: `YouTube-Kanal "${userName}" nicht gefunden.`,
-      };
-    }
-
-    return {
-      success: true,
-      message: `YouTube-Kanal "${userName}" wurde entfernt.`,
-    };
+    await executeQuery('DELETE', 'youtubers', {}, {
+      user_name: userName
+    });
+    return createSuccessResponse(true, `${youtubeFeedbackSuccess.emoji}YouTube-Kanal "${userName}" erfolgreich entfernt.`);
   } catch (error) {
-    logAndThrowError(
-      `Fehler beim Entfernen des YouTube-Kanals "${userName}"`,
-      error
-    );
+    logAndThrowError(youtubeFeedbackError.emoji, `Fehler beim Entfernen des YouTube-Kanals "${userName}"`, error);
   }
 }
 
@@ -127,18 +93,15 @@ export async function removeYouTubeChannel(userName) {
  * Ruft einen YouTube-Kanal anhand eines Feldes ab.
  */
 export async function getYouTubeChannelByField(field, value) {
+  validateValue(field, "field", "string");
+  validateValue(value, "value", "string");
   try {
-    const query = `
-      SELECT * FROM youtubers
-      WHERE ${field} = $1;
-    `;
-    const result = await db.query(query, [value]);
-
-    if (result.rowCount === 0) return null;
-
-    return result.rows[0];
+    const result = await executeQuery('SELECT', 'youtubers', {}, {
+      [field]: value
+    });
+    return createSuccessResponse(true, `${youtubeFeedbackSuccess.emoji} YouTube-Kanal mit ${field} = "${value}" erfolgreich abgerufen.`, result.rows[0] || null);
   } catch (error) {
-    logAndThrowError("Fehler beim Abrufen des YouTube-Kanals", error);
+    logAndThrowError(youtubeFeedbackError.emoji, `Fehler beim Abrufen des YouTube-Kanals mit ${field} = "${value}"`, error);
   }
 }
 
@@ -147,22 +110,9 @@ export async function getYouTubeChannelByField(field, value) {
  */
 export async function getTrackedYouTubeChannels() {
   try {
-    const query = `
-      SELECT user_name, discord_channel_name, discord_channel_id, latest_video_id, created_at, updated_at
-      FROM youtubers
-      ORDER BY user_name;
-    `;
-    const result = await db.query(query);
-
-    if (result.rowCount === 0) {
-      return [];
-    }
-
-    return result.rows;
+    const result = await executeQuery('SELECT', 'youtubers');
+    return createSuccessResponse(true, `${youtubeFeedbackSuccess.emoji} Überwachte YouTube-Kanäle erfolgreich abgerufen.`, result.rows);
   } catch (error) {
-    logAndThrowError(
-      "Fehler beim Abrufen der überwachten YouTube-Kanäle",
-      error
-    );
+    logAndThrowError(youtubeFeedbackError.emoji, "Fehler beim Abrufen der überwachten YouTube-Kanäle", error);
   }
 }

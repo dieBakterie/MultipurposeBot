@@ -1,5 +1,8 @@
 // src/database/rolemenuDatabase.js
-import { db } from "./database.js";
+import { executeQuery } from '../utils/databaseUtils.js';
+import { createSuccessResponse, logAndThrowError } from '../utils/helpers.js';
+import { validateValue, validateFields } from '../utils/validation.js';
+import { discordFeedbackError, discordFeedbackSuccess } from '../alias.js';
 
 // Erstelle ein RoleMenu
 export async function createRoleMenu(
@@ -9,236 +12,386 @@ export async function createRoleMenu(
   mode,
   guildId
 ) {
-  const query = `
-    INSERT INTO rolemenus (message_id, channel_id, group_name, mode, guild_id)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING id;
-  `;
-  const { rows } = await db.query(query, [
-    messageId,
-    channelId,
-    groupName,
-    mode,
-    guildId,
-  ]);
-  return rows[0]?.id || null;
+  validateFields({
+    message_id: messageId,
+    channel_id: channelId,
+    group_name: groupName,
+    mode: mode,
+    guild_id: guildId
+  }, discordFeedbackError.emoji, 'Fehler beim Erstellen des RoleMenus', true);
+  try {
+    const result = await executeQuery('INSERT', 'rolemenus', {
+      message_id: messageId,
+      channel_id: channelId,
+      group_name: groupName,
+      mode: mode,
+      guild_id: guildId
+    }, {}, {
+      target: 'message_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `RoleMenu für ${groupName} erfolgreich erstellt.`, result.rows[0]);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Erstellen des RoleMenus für ${groupName}`, error);
+  }
 }
 
 // Füge ein aktives Setup hinzu
 export async function addActiveSetup(messageId, guildId, expiresAt) {
-  const query = `
-    INSERT INTO active_setups (message_id, guild_id, expires_at)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (message_id) DO NOTHING;
-  `;
-  await db.query(query, [messageId, guildId, expiresAt]);
+  validateFields({
+    message_id: messageId,
+    guild_id: guildId,
+    expires_at: expiresAt
+  }, discordFeedbackError.emoji, 'Fehler beim Hinzufügen des aktiven Setups', true);
+  try {
+    await executeQuery('INSERT', 'active_setups', {
+      message_id: messageId,
+      guild_id: guildId,
+      expires_at: expiresAt
+    }, {}, {
+      target: 'message_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Aktives Setup für ${messageId} erfolgreich hinzugefügt.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Hinzufügen des aktiven Setups für ${messageId}`, error);
+  }
 }
 
 // Füge eine Rolle zu einem RoleMenu hinzu
 export async function addRoleMenuRole(roleMenuId, emoji, roleId) {
-  const query = `
-    INSERT INTO rolemenu_roles (rolemenu_id, emoji, role_id)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (rolemenu_id, emoji) DO UPDATE SET role_id = $3;
-  `;
-  await db.query(query, [roleMenuId, emoji, roleId]);
+  validateFields({
+    role_menu_id: roleMenuId,
+    emoji: emoji,
+    role_id: roleId
+  }, discordFeedbackError.emoji, 'Fehler beim Hinzufügen der Rolle zu RoleMenu', true);
+  try {
+    await executeQuery('INSERT', 'rolemenu_roles', {
+      rolemenu_id: roleMenuId,
+      emoji: emoji,
+      role_id: roleId
+    }, {}, {
+      target: 'rolemenu_id, emoji',
+      action: 'UPDATE SET role_id = EXCLUDED.role_id'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Rolle ${roleId} erfolgreich zu RoleMenu ${roleMenuId} hinzugefügt.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Hinzufügen der Rolle ${roleId} zu RoleMenu ${roleMenuId}`, error);
+  }
 }
 
 // Entferne ein aktives Setup
 export async function removeActiveSetup(messageId) {
-  const query = `
-    DELETE FROM active_setups
-    WHERE message_id = $1;
-  `;
-  await db.query(query, [messageId]);
+  validateValue(messageId, discordFeedbackError.emoji, 'Fehler beim Entfernen des aktiven Setups', true);
+  try {
+    await executeQuery('DELETE', 'active_setups', {}, {
+      message_id: messageId
+    }, {
+      target: 'message_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Aktives Setup für ${messageId} erfolgreich entfernt.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Entfernen des aktiven Setups für ${messageId}`, error);
+  }
 }
 
 // Aktualisiere eine Rolle im RoleMenu
 export async function updateRoleMenuRole(roleMenuId, emoji, roleId) {
-  const query = `
-    UPDATE rolemenu_roles
-    SET role_id = $3
-    WHERE rolemenu_id = $1 AND emoji = $2
-    RETURNING *;
-  `;
-  const { rows } = await db.query(query, [roleMenuId, emoji, roleId]);
-  return rows[0] || null;
+  validateFields({
+    role_menu_id: roleMenuId,
+    emoji: emoji,
+    role_id: roleId
+  }, discordFeedbackError.emoji, 'Fehler beim Aktualisieren der Rolle im RoleMenu');
+  try {
+    await executeQuery('UPDATE', 'rolemenu_roles', {
+      role_id: roleId
+    }, {
+      rolemenu_id: roleMenuId,
+      emoji: emoji
+    }, {
+      target: 'rolemenu_id, emoji',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Rolle im RoleMenu ${roleMenuId} erfolgreich aktualisiert.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Aktualisieren der Rolle im RoleMenu ${roleMenuId}`, error);
+  }
 }
 
 // Hole alle Rollen eines RoleMenus
 export async function fetchRoleMenuRoles(messageId) {
-  const query = `
-    SELECT r.emoji, r.role_id
-    FROM rolemenu_roles r
-    JOIN rolemenus m ON r.rolemenu_id = m.id
-    WHERE m.message_id = $1;
-  `;
-  const { rows } = await db.query(query, [messageId]);
-  return rows;
+  validateFields({
+    message_id : messageId
+  }, discordFeedbackError.emoji, 'Fehler beim Abrufen der Rollen des RoleMenus');
+  try {
+    const result = await executeQuery('SELECT', 'rolemenu_roles', {}, {
+      message_id: messageId
+    }, {
+      target: 'message_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Rollen für RoleMenu ${messageId} erfolgreich abgerufen.`, result.rows);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Abrufen der Rollen für RoleMenu ${messageId}`, error);
+  }
 }
 
 // Hole alle RoleMenus einer Gilde
 export async function fetchAllRoleMenus(guildId) {
-  const query = `
-    SELECT id, message_id, group_name, mode, created_at, updated_at
-    FROM rolemenus
-    WHERE guild_id = $1;
-  `;
-  const { rows } = await db.query(query, [guildId]);
-  return rows;
+  validateFields({
+    guild_id: guildId
+  }, discordFeedbackError.emoji, 'Fehler beim Abrufen der RoleMenus');
+  try {
+    const result = await executeQuery('SELECT', 'rolemenus', {}, {
+      guild_id: guildId
+    }, {
+      target: 'guild_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Alle RoleMenus für Gilde ${guildId} erfolgreich abgerufen.`, result.rows);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Abrufen der RoleMenus für Gilde ${guildId}`, error);
+  }
 }
 
 // Hole Rollen mit zusätzlichen Informationen
 export async function fetchDetailedRoleMenuRoles(messageId) {
-  const query = `
-    SELECT rr.emoji, rr.role_id, rr.created_at, rr.updated_at
-    FROM rolemenu_roles rr
-    JOIN rolemenus rm ON rr.rolemenu_id = rm.id
-    WHERE rm.message_id = $1;
-  `;
-  const { rows } = await db.query(query, [messageId]);
-  return rows;
+  validateFields({
+    message_id : messageId
+  }, discordFeedbackError.emoji, 'Fehler beim Abrufen der Rollen des RoleMenus');
+  try {
+    const result = await executeQuery('SELECT', 'rolemenu_roles', {}, {
+      message_id: messageId
+    }, {
+      target: 'message_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Detaillierte Rolleninformationen für RoleMenu ${messageId} erfolgreich abgerufen.`, result.rows);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Abrufen der detaillierten Rolleninformationen für RoleMenu ${messageId}`, error);
+  }
 }
 
 // Hole alle Rollen einer Gruppe
 export async function fetchGroupRoles(messageId) {
-  const query = `
-    SELECT r.emoji, r.role_id
-    FROM rolemenu_roles r
-    JOIN rolemenus m ON r.rolemenu_id = m.id
-    WHERE m.message_id = $1;
-  `;
-  const { rows } = await db.query(query, [messageId]);
-  return rows;
+  validateFields({
+    message_id : messageId
+  }, discordFeedbackError.emoji, 'Fehler beim Abrufen der Rollen des RoleMenus');
+  try {
+    const result = await executeQuery('SELECT', 'rolemenu_roles', {}, {
+      message_id: messageId
+    }, {
+      target: 'message_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Rollen für Gruppe ${messageId} erfolgreich abgerufen.`, result.rows);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Abrufen der Rollen für Gruppe ${messageId} für Gilde ${guildId}`, error);
+  }
 }
 
 // Erstelle eine neue Gruppe
 export async function createRoleMenuGroup(groupName, mode, guildId) {
-  const query = `
-    INSERT INTO rolemenus (group_name, mode, guild_id, created_at, updated_at)
-    VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    ON CONFLICT (group_name, guild_id) DO UPDATE SET
-      mode = EXCLUDED.mode,
-      updated_at = CURRENT_TIMESTAMP
-    RETURNING id;
-  `;
-  const { rows } = await db.query(query, [groupName, mode, guildId]);
-  return rows[0]?.id || null;
+  validateFields({
+    group_name : groupName,
+    mode : mode,
+    guild_id : guildId
+  }, discordFeedbackError.emoji, 'Fehler beim Erstellen der Gruppe');
+  try {
+    await executeQuery('INSERT', 'rolemenu_groups', {
+      group_name: groupName,
+      mode: mode,
+      guild_id: guildId
+    }, {}, {
+      target: 'group_name, guild_id',
+      action: 'UPDATE SET mode = EXCLUDED.mode'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Gruppe ${groupName} erfolgreich erstellt.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Erstellen der Gruppe ${groupName}`, error);
+  }
 }
 
 // Füge Rollen zu einer Gruppe hinzu
 export async function addRolesToGroup(groupName, roleId, label, guildId) {
-  const query = `
-    INSERT INTO rolemenu_roles (rolemenu_id, role_id, label, created_at, updated_at)
-    SELECT id, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    FROM rolemenus
-    WHERE group_name = $1 AND guild_id = $4
-    ON CONFLICT (rolemenu_id, role_id) DO UPDATE SET
-      label = EXCLUDED.label,
-      updated_at = CURRENT_TIMESTAMP;
-  `;
-  await db.query(query, [groupName, roleId, label, guildId]);
+  validateFields({
+    group_name : groupName,
+    role_id : roleId,
+    label : label,
+    guild_id : guildId
+  }, discordFeedbackError.emoji, 'Fehler beim Hinzufügen der Rolle zur Gruppe');
+  try {
+    await executeQuery('INSERT', 'group_roles', {
+      group_name: groupName,
+      role_id: roleId,
+      label: label,
+      guild_id: guildId
+    }, {}, {
+      target: 'group_name, role_id, guild_id',
+      action: 'UPDATE SET label = EXCLUDED.label'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Rolle ${roleId} erfolgreich zur Gruppe ${groupName} hinzugefügt.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Hinzufügen der Rolle ${roleId} zur Gruppe ${groupName}`, error);
+  }
 }
 
 // Aktualisiere eine Gruppe (z.B. Name, Modus)
 export async function updateRoleMenuGroup(groupName, newMode, guildId) {
-  const query = `
-    UPDATE rolemenus
-    SET mode = $2, updated_at = CURRENT_TIMESTAMP
-    WHERE group_name = $1 AND guild_id = $3
-    RETURNING *;
-  `;
-  const { rows } = await db.query(query, [groupName, newMode, guildId]);
-  return rows[0] || null;
+  validateFields({
+    group_name : groupName,
+    mode : newMode,
+    guild_id : guildId
+  }, discordFeedbackError.emoji, 'Fehler beim Aktualisieren der Gruppe');
+  try {
+    await executeQuery('UPDATE', 'rolemenu_groups', {
+      mode: newMode
+    }, {
+      group_name: groupName,
+      guild_id: guildId
+    }, {
+      target: 'group_name, guild_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Gruppe ${groupName} erfolgreich aktualisiert.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Aktualisieren der Gruppe ${groupName}`, error);
+  }
 }
 
 // Entferne eine Gruppe und ihre Rollen
 export async function deleteRoleMenuGroup(groupName, guildId) {
-  const query = `
-    DELETE FROM rolemenus
-    WHERE group_name = $1 AND guild_id = $2
-    RETURNING id;
-  `;
-  const { rows } = await db.query(query, [groupName, guildId]);
-
-  if (rows.length > 0) {
-    const roleMenuId = rows[0].id;
-
-    // Entferne alle Rollen dieser Gruppe
-    await db.query(
-      `
-      DELETE FROM rolemenu_roles
-      WHERE rolemenu_id = $1;
-    `,
-      [roleMenuId]
-    );
+  validateFields({
+    group_name : groupName,
+    guild_id : guildId
+  }, discordFeedbackError.emoji, `Fehler beim Entfernen der Gruppe ${groupName}`);
+  try {
+    const group = await fetchGroupDetails(groupName, guildId);
+    if (group) {
+      await executeQuery('DELETE', 'rolemenu_roles', {}, {
+        rolemenu_id: group.id
+      }, {
+        target: 'rolemenu_id',
+        action: 'NOTHING'
+      });
+      await executeQuery('DELETE', 'rolemenus', {}, {
+        group_name: groupName,
+        guild_id: guildId
+      }, {
+        target: 'group_name, guild_id',
+        action: 'NOTHING'
+      });
+      return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Gruppe ${groupName} erfolgreich entfernt.`);
+    } else {
+      return createSuccessResponse(false, discordFeedbackError.emoji, `Gruppe ${groupName} nicht gefunden.`);
+    }
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Entfernen der Gruppe ${groupName}`, error);
   }
-
-  return rows[0]?.id || null;
 }
 
 // Hole alle Gruppen einer Gilde
 export async function fetchAllGroups(guildId) {
-  const query = `
-    SELECT id, group_name, mode, created_at, updated_at
-    FROM rolemenus
-    WHERE guild_id = $1;
-  `;
-  const { rows } = await db.query(query, [guildId]);
-  return rows;
+  validateFields({
+    guild_id: guildId
+  }, discordFeedbackError.emoji, `Fehler beim Abrufen der Gruppen für Gilde ${guildId}`);
+  try {
+    const result = await executeQuery('SELECT', 'rolemenu_groups', {}, {
+      guild_id: guildId
+    }, {
+      target: 'guild_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Alle Gruppen für Gilde ${guildId} erfolgreich abgerufen.`, result.rows);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Abrufen der Gruppen für Gilde ${guildId}`, error);
+  }
 }
 
 // Hole alle Rollen einer Gruppe
 export async function fetchGroupRolesByName(groupName, guildId) {
-  const query = `
-    SELECT rr.role_id, rr.label, rr.emoji
-    FROM rolemenu_roles rr
-    JOIN rolemenus rm ON rr.rolemenu_id = rm.id
-    WHERE rm.group_name = $1 AND rm.guild_id = $2;
-  `;
-  const { rows } = await db.query(query, [groupName, guildId]);
-  return rows;
+  validateFields({
+    group_name : groupName,
+    guild_id : guildId
+  }, discordFeedbackError.emoji, `Fehler beim Abrufen der Rollen für Gruppe ${groupName} für Gilde ${guildId}`);
+  try {
+    const result = await executeQuery('SELECT', 'group_roles', {}, {
+      group_name: groupName,
+      guild_id: guildId
+    }, {
+      target: 'group_name, guild_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Rollen für Gruppe ${groupName} erfolgreich abgerufen.`, result.rows);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Abrufen der Rollen für Gruppe ${groupName}`, error);
+  }
 }
 
 // Aktualisiere eine Rolle in einer Gruppe
 export async function updateGroupRole(groupName, roleId, newLabel, newEmoji) {
-  const query = `
-    UPDATE rolemenu_roles
-    SET label = $3, emoji = $4, updated_at = CURRENT_TIMESTAMP
-    WHERE role_id = $2 AND rolemenu_id = (
-      SELECT id FROM rolemenus WHERE group_name = $1
-    )
-    RETURNING *;
-  `;
-  const { rows } = await db.query(query, [
-    groupName,
-    roleId,
-    newLabel,
-    newEmoji,
-  ]);
-  return rows[0] || null;
+  validateFields({
+    group_name : groupName,
+    role_id : roleId,
+    label : newLabel,
+    emoji : newEmoji
+  }, discordFeedbackError.emoji, 'Fehler beim Aktualisieren der Rolle in Gruppe');
+  try {
+    await executeQuery('UPDATE', 'group_roles', {
+      label: newLabel,
+      emoji: newEmoji
+    }, {
+      group_name: groupName,
+      role_id: roleId
+    }, {
+      target: 'group_name, role_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Rolle ${roleId} in Gruppe ${groupName} erfolgreich aktualisiert.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Aktualisieren der Rolle ${roleId} in Gruppe ${groupName}`, error);
+  }
 }
 
 // Hole Details einer Gruppe
 export async function fetchGroupDetails(groupName, guildId) {
-  const query = `
-    SELECT id, group_name, mode, created_at, updated_at
-    FROM rolemenus
-    WHERE group_name = $1 AND guild_id = $2;
-  `;
-  const { rows } = await db.query(query, [groupName, guildId]);
-  return rows[0] || null;
+  validateFields({
+    group_name : groupName,
+    guild_id : guildId
+  }, discordFeedbackError.emoji, `Fehler beim Abrufen der Details für Gruppe ${groupName} für Gilde ${guildId}`);
+  try {
+    const result = await executeQuery('SELECT', 'rolemenu_groups', {}, {
+      group_name: groupName,
+      guild_id: guildId
+    }, {
+      target: 'group_name, guild_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Details für Gruppe ${groupName} erfolgreich abgerufen.`, result.rows[0]);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Abrufen der Details für Gruppe ${groupName} für Gilde ${guildId}`, error);
+  }
 }
 
 // Entferne eine spezifische Rolle aus einer Gruppe
 export async function removeRoleFromGroup(groupName, roleId, guildId) {
-  const query = `
-    DELETE FROM rolemenu_roles
-    WHERE role_id = $1 AND rolemenu_id = (
-      SELECT id FROM rolemenus WHERE group_name = $2 AND guild_id = $3
-    )
-    RETURNING *;
-  `;
-  const { rows } = await db.query(query, [roleId, groupName, guildId]);
-  return rows[0] || null;
+  validateFields({
+    group_name : groupName,
+    role_id : roleId,
+    guild_id : guildId
+  }, discordFeedbackError.emoji, `Fehler beim Entfernen der Rolle ${roleId} aus Gruppe ${groupName} für Gilde ${guildId}`);
+  try {
+    await executeQuery('DELETE', 'group_roles', {}, {
+      role_id: roleId,
+      group_name: groupName,
+      guild_id: guildId
+    }, {
+      target: 'role_id, group_name, guild_id',
+      action: 'NOTHING'
+    });
+    return createSuccessResponse(true, discordFeedbackSuccess.emoji, `Rolle ${roleId} aus Gruppe ${groupName} erfolgreich entfernt.`);
+  } catch (error) {
+    logAndThrowError(discordFeedbackError.emoji, `Fehler beim Entfernen der Rolle ${roleId} aus Gruppe ${groupName} für Gilde ${guildId}`, error);
+  }
 }

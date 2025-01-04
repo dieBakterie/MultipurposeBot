@@ -1,5 +1,6 @@
 // src/utils/apiManager.js
 import axios from "axios";
+import { handleAxiosError } from "./helpers.js";
 
 export default class APIManager {
   /**
@@ -41,10 +42,7 @@ export default class APIManager {
       return response.data; // Rückgabe der API-Daten
     } catch (error) {
       // Fehlerbehandlung
-      const errorMessage = error.response
-        ? `API Fehler: ${error.response.statusText} (${error.response.status})`
-        : `Netzwerkfehler: ${error.message}`;
-      throw new Error(errorMessage);
+      handleAxiosError(error);
     }
   }
 
@@ -54,5 +52,44 @@ export default class APIManager {
    */
   setDefaultHeaders(headers) {
     Object.assign(this.client.defaults.headers.common, headers);
+  }
+
+  /**
+   * Retrieves or generates a cached access token for OAuth2 services.
+   * If a valid token exists, it returns the cached token.
+   * Otherwise, it requests a new token and caches it.
+   * @param {string} clientId - The client ID for the service.
+   * @param {string} clientSecret - The client secret for the service.
+   * @param {string} tokenUrl - The URL to request the token from.
+   * @param {string} grantType - The grant type for the OAuth2 request (default: "client_credentials").
+   * @returns {Promise<string>} - The access token.
+   */
+  async getOrCacheAccessToken(clientId, clientSecret, tokenUrl, grantType = "client_credentials") {
+    const now = Date.now();
+
+    // Check if a valid token exists
+    if (this.accessToken && now < this.tokenExpiresAt) {
+      return this.accessToken;
+    }
+
+    try {
+      const response = await this.makeRequest(tokenUrl, "POST", undefined, {
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: grantType,
+      }, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }
+      });
+
+      const { access_token, expires_in } = response;
+
+      // Cache the token and set its expiration time
+      this.accessToken = access_token;
+      this.tokenExpiresAt = now + expires_in * 1000;
+
+      return this.accessToken;
+    } catch (error) {
+      handleAxiosError(error);
+    }
   }
 }

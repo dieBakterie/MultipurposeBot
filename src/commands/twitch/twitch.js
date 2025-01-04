@@ -1,12 +1,12 @@
 // src/commands/Twitch/twitch.js
-import { SlashCommandBuilder, ChannelType } from "discord.js";
+import pkg from "discord.js";
+const { SlashCommandBuilder, EmbedBuilder, ChannelType } = pkg;
 import {
   addTwitchChannel,
   removeTwitchChannel,
-  getTrackedTwitchChannels,
+  getTrackedStreamers,
   setDiscordChannelForStreamer,
 } from "../../database/twitchDatabase.js";
-import { searchStreamer } from "../../services/Twitch/twitch.js";
 import {
   twitchFeedbackError,
   twitchFeedbackSuccess,
@@ -33,7 +33,7 @@ export default {
           option
             .setName("channel_name")
             .setDescription(
-              `${twitchFeedbackInfo.emoji} Der Discord-Kanal für Live-Benachrichtigungen. Falls nicht angegeben, wird der aktuelle Kanal verwendet.`
+              `${twitchFeedbackInfo.emoji} Der Discord-Kanal für Live-Benachrichtigungen.`
             )
             .addChannelTypes(ChannelType.GuildText)
         )
@@ -70,7 +70,14 @@ export default {
         )
     )
     .addSubcommand((subcommand) =>
-      subcommand.setName("list").setDescription("Liste aller Twitch-Streamer.")
+      subcommand
+        .setName("list")
+        .setDescription("Liste aller Twitch-Streamer.")
+        .addStringOption((option) =>
+          option
+            .setName("filter")
+            .setDescription("Filtere die Liste nach einem Suchbegriff.")
+        )
     ),
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -82,18 +89,31 @@ export default {
           interaction.options.getChannel("channel_name") || interaction.channel;
 
         // Überprüfung: Ist der Kanal gültig?
-        if (!channel || !channel.isTextBased()) {
+        if (!channel || channel.type !== ChannelType.GuildText) {
           return interaction.reply({
             content: `${twitchFeedbackError.emoji} Der Kanal **${
               channel?.toString() || "unbekannt"
-            }** ist ungültig.`,
+            }** ist ungültig oder kein Textkanal.`,
+            ephemeral: true,
+          });
+        }
+
+        if (!streamerName.trim()) {
+          return interaction.reply({
+            content: `${twitchFeedbackError.emoji} Der Streamername darf nicht leer sein.`,
             ephemeral: true,
           });
         }
 
         try {
-          // Twitch-Streamer-Details abrufen
-          const streamerDetails = await searchStreamer(streamerName);
+          console.log(
+            `Füge Streamer hinzu: ${streamerName}, Kanal: ${channel.id}`
+          );
+
+          // Validierung und Abruf der Streamer-Details
+          const streamerDetails = await validateAndFetchStreamerDetails(
+            streamerName
+          );
 
           if (!streamerDetails) {
             return interaction.reply({
@@ -102,29 +122,38 @@ export default {
             });
           }
 
-          // Streamer und Kanal-ID in der Datenbank speichern
+          // Überprüfen, ob der Streamer bereits hinzugefügt wurde
+          const existingStreamers = await getTrackedStreamers();
+          if (
+            existingStreamers.data.some(
+              (streamer) =>
+                streamer.userId === streamerDetails.id ||
+                streamer.userName === streamerDetails.login
+            )
+          ) {
+            return interaction.reply({
+              content: `${twitchFeedbackInfo.emoji} Der Streamer **${streamerName}** ist bereits hinzugefügt.`,
+              ephemeral: true,
+            });
+          }
+
+          // Hinzufügen des Streamers
           const result = await addTwitchChannel(
+            streamerDetails.id,
+            streamerDetails.login,
             streamerDetails.display_name,
             channel.id
           );
 
-          // Erfolgsmeldung
-          if (result.success) {
-            return interaction.reply({
-              content: `${twitchFeedbackSuccess.emoji} ${
-                result.message
-              } Benachrichtigungen werden an ${channel.toString()} gesendet.`,
-              ephemeral: true,
-            });
-          } else {
-            return interaction.reply({
-              content: `${twitchFeedbackError.emoji} Fehler beim Hinzufügen des Streamers "${streamerName}".`,
-              ephemeral: true,
-            });
-          }
+          return interaction.reply({
+            content: `${result.success ? twitchFeedbackSuccess.emoji : twitchFeedbackError.emoji} ${
+              result.message
+            } Benachrichtigungen werden an ${channel.toString()} gesendet.`,
+            ephemeral: true,
+          });
         } catch (error) {
           console.error(
-            "Fehler beim Hinzufügen des Streamers:",
+            `${twitchFeedbackError.emoji} Fehler beim Hinzufügen des Streamers:`,
             error.stack || error
           );
           return interaction.reply({
@@ -138,19 +167,32 @@ export default {
         const streamerName = interaction.options.getString("user_name");
         const channel = interaction.options.getChannel("channel_id");
 
-        if (!channel) {
+        // Überprüfung: Ist der Kanal gültig?
+        if (!channel || channel.type !== ChannelType.GuildText) {
           return interaction.reply({
-            content: `${
-              twitchFeedbackError.emoji
-            } Der Kanal **${channel?.ToString()}** ist ungültig.`,
+            content: `${twitchFeedbackError.emoji} Der Kanal **${
+              channel?.toString() || "unbekannt"
+            }** ist ungültig oder kein Textkanal.`,
+            ephemeral: true,
+          });
+        }
+
+        if (!streamerName.trim()) {
+          return interaction.reply({
+            content: `${twitchFeedbackError.emoji} Der Streamername darf nicht leer sein.`,
             ephemeral: true,
           });
         }
 
         try {
+          console.log(
+            `Setze neuen Kanal für Streamer: ${streamerName}, Kanal: ${channel.id}`
+          );
+
           const result = await setDiscordChannelForStreamer(
             streamerName,
-            channel
+            channel.id,
+            channel.name
           );
 
           if (!result.success) {
@@ -163,11 +205,14 @@ export default {
           return interaction.reply({
             content: `${
               twitchFeedbackSuccess.emoji
-            } Der Discord-Kanal für **${streamerName}** wurde erfolgreich auf **${channel.ToString()}** (${channel}) geändert.`,
-            ephemeral: false,
+            } Der Discord-Kanal für **${streamerName}** wurde erfolgreich auf **${channel.toString()}** gesetzt.`,
+            ephemeral: true,
           });
         } catch (error) {
-          console.error("Fehler beim Ändern des Kanals:", error.stack || error);
+          console.error(
+            `${twitchFeedbackError.emoji} Fehler beim Ändern des Kanals:`,
+            error.stack || error
+          );
           return interaction.reply({
             content: `${twitchFeedbackError.emoji} Fehler beim Ändern des Kanals.`,
             ephemeral: true,
@@ -178,22 +223,32 @@ export default {
       case "remove": {
         const streamerName = interaction.options.getString("user_name");
 
-        try {
-          const removed = await removeTwitchChannel(streamerName);
+        if (!streamerName.trim()) {
+          return interaction.reply({
+            content: `${twitchFeedbackError.emoji} Der Streamername darf nicht leer sein.`,
+            ephemeral: true,
+          });
+        }
 
-          if (!removed) {
+        try {
+          console.log(`Entferne Streamer: ${streamerName}`);
+
+          const result = await removeTwitchChannel(streamerName);
+
+          if (!result.success) {
             return interaction.reply({
               content: `${twitchFeedbackInfo.emoji} Der Streamer **${streamerName}** wurde nicht gefunden.`,
               ephemeral: true,
             });
           }
 
-          return interaction.reply(
-            `${twitchFeedbackSuccess.emoji} Der Streamer **${streamerName}** wurde erfolgreich entfernt.`
-          );
+          return interaction.reply({
+            content: `${twitchFeedbackSuccess.emoji} Der Streamer **${streamerName}** wurde erfolgreich entfernt.`,
+            ephemeral: true,
+          });
         } catch (error) {
           console.error(
-            "Fehler beim Entfernen des Streamers:",
+            `${twitchFeedbackError.emoji} Fehler beim Entfernen des Streamers:`,
             error.stack || error
           );
           return interaction.reply({
@@ -205,36 +260,61 @@ export default {
 
       case "list": {
         try {
-          const streamerList = await getTrackedTwitchChannels();
+          const filter = interaction.options.getString("filter") || "";
+          const streamers = await getCachedTrackedStreamers(filter);
 
-          if (streamerList.length === 0) {
+          const count = streamers.length;
+
+          if (count === 0) {
             return interaction.reply({
-              content: `${twitchFeedbackInfo.emoji} Es sind keine Streamer gespeichert.`,
+              content: `${twitchFeedbackInfo.emoji} Es sind keine Twitch-Streamer gespeichert.`,
               ephemeral: true,
             });
           }
 
-          return interaction.reply(
-            `${
-              twitchFeedbackList.emoji
-            } Liste der Twitch-Streamer:\n${streamerList
-              .map(
-                (streamer) =>
-                  `- **${streamer.streamerName}** (Kanal: ${
-                    streamer.discordChannelId
-                      ? `<#${streamer.discordChannelId}>`
-                      : "Kein Kanal"
-                  })`
+          const itemsPerPage = 10;
+          const totalPages = Math.ceil(count / itemsPerPage);
+
+          const generateEmbed = (page) => {
+            const start = page * itemsPerPage;
+            const end = start + itemsPerPage;
+            const pageItems = streamers.slice(start, end);
+
+            const embed = new EmbedBuilder()
+              .setTitle(`${twitchFeedbackList.emoji} Liste der Twitch-Streamer`)
+              .setDescription(
+                pageItems
+                  .map(
+                    (streamer, index) =>
+                      `**${start + index + 1}.** ${
+                        streamer.displayName
+                      } (Kanal: ${
+                        streamer.discordChannelId
+                          ? `<#${streamer.discordChannelId}>`
+                          : "Kein Kanal"
+                      })`
+                  )
+                  .join("\n")
               )
-              .join("\n")}`
+              .setFooter({ text: `Seite ${page + 1} von ${totalPages}` });
+
+            return embed;
+          };
+
+          await handleTwitchControl(
+            interaction,
+            count,
+            itemsPerPage,
+            totalPages,
+            generateEmbed
           );
         } catch (error) {
           console.error(
-            `${twitchFeedbackError.emoji} Fehler beim Abrufen der Streamer-Liste:`,
-            error
+            `${twitchFeedbackError.emoji} Fehler beim Abrufen der Streamerliste:`,
+            error.stack || error
           );
           return interaction.reply({
-            content: `${twitchFeedbackError.emoji} Fehler beim Abrufen der Streamer-Liste.`,
+            content: `${twitchFeedbackError.emoji} Fehler beim Abrufen der Streamerliste.`,
             ephemeral: true,
           });
         }

@@ -1,24 +1,55 @@
 // src/events/interactionCreate.js
+// **Imports**
+
+// Music
 import { handleMusicControl } from "../services/music/interactionMusicControls.js";
+
+// RoleMenu
 import { handleRoleMenuControl } from "../services/rolemenu/interactionRoleMenuControls.js";
-import { getTrackedTwitchChannels } from "../database/twitchDatabase.js";
-import {
-  fetchAllRoleMenus,
-  fetchRoleMenuRoles,
-} from "../database/rolemenuDatabase.js";
+import { handleRoleMenuAutoCompleteSuggestions } from "../services/Rolemenu/interactionRoleMenuAutoComplete.js";
+
+// Spotify
+import { handleSpotifyControl } from "../services/Spotify/interactionSpotifyControls.js";
+import { handleSpotifyAutoCompleteSuggestions } from "../services/Spotify/interactionSpotifyAutoComplete.js";
+
+// Twitch
+import { handleTwitchControl } from "../services/Twitch/interactionTwitchControls.js";
+import { handleTwitchAutoCompleteSuggestions } from "../services/Twitch/interactionTwitchAutoComplete.js";
+
+// YouTube
+import { handleYouTubeControl } from "../services/YouTube/interactionYouTubeControls.js";
+import { handleYouTubeAutoCompleteSuggestions } from "../services/YouTube/interactionYouTubeAutoComplete.js";
 
 export default {
   name: "interactionCreate",
   async execute(interaction) {
     try {
+      const guildId = interaction.guildId;
+
       // **Button-Interaktionen**
       if (interaction.isButton()) {
-        // Musiksteuerung
-        if (["play_pause", "skip", "stop"].includes(interaction.customId)) {
-          await handleMusicControl(interaction);
-        } else if (interaction.customId.startsWith("role_")) {
+        const customId = interaction.customId;
+
+        if (["play_pause", "skip", "stop"].includes(customId)) {
+          // Musiksteuerung
+          await handleMusicControl(interaction, guildId);
+        } else if (customId.startsWith("role_")) {
           // Rollensteuerung
           await handleRoleMenuControl(interaction);
+        } else if (customId.startsWith("spotify_")) {
+          // Spotify-Interaktionen
+          await handleSpotifyControl(interaction, interaction.channel, guildId);
+        } else if (customId.startsWith("twitch_")) {
+          // Twitch-Interaktionen
+          await handleTwitchControl(interaction, guildId);
+        } else if (customId.startsWith("youtube_")) {
+          // YouTube-Interaktionen
+          await handleYouTubeControl(interaction, interaction.channel, guildId);
+        } else {
+          await interaction.reply({
+            content: "Diese Interaktion ist nicht verstanden.",
+            ephemeral: true,
+          });
         }
         return;
       }
@@ -26,58 +57,44 @@ export default {
       // **Autocomplete-Interaktionen**
       if (interaction.isAutocomplete()) {
         const focusedOption = interaction.options.getFocused(true);
+        const autocompleteCache = new Map(); // Cache initialisieren
 
-        // Autocomplete für Twitch-Streamer
-        if (
-          interaction.commandName === "twitch" &&
-          focusedOption.name === "user_name"
-        ) {
-          const streamers = await getTrackedTwitchChannels();
-          const choices = streamers.filter((streamer) =>
-            streamer.toLowerCase().includes(focusedOption.value.toLowerCase())
-          );
-          return interaction.respond(
-            choices.map((choice) => ({ name: choice, value: choice }))
-          );
+        switch (interaction.commandName) {
+          case "twitch":
+            await handleTwitchAutoCompleteSuggestions(
+              interaction,
+              focusedOption,
+              autocompleteCache
+            );
+            break;
+          case "rolemenu":
+            await handleRoleMenuAutoCompleteSuggestions(
+              interaction,
+              focusedOption,
+              autocompleteCache
+            );
+            break;
+          case "youtube":
+            await handleYouTubeAutoCompleteSuggestions(
+              interaction,
+              focusedOption,
+              autocompleteCache
+            );
+            break;
+          case "spotify":
+            await handleSpotifyAutoCompleteSuggestions(
+              interaction,
+              focusedOption,
+              autocompleteCache
+            );
+            break;
+          default:
+            await interaction.respond({
+              content: "Autocomplete-Funktion nicht verfügbar.",
+              ephemeral: true,
+            });
         }
-
-        // Autocomplete für Rollen im RoleMenu
-        if (interaction.commandName === "rolemenu") {
-          const subcommand = interaction.options.getSubcommand();
-
-          if (subcommand === "edit") {
-            if (focusedOption.name === "message_id") {
-              const roleMenus = await fetchAllRoleMenus(interaction.guild.id);
-              return interaction.respond(
-                roleMenus.map((menu) => ({
-                  name: `Gruppe: ${menu.group_name}, ID: ${menu.message_id}`,
-                  value: menu.message_id,
-                }))
-              );
-            } else if (focusedOption.name === "emoji") {
-              const messageId = interaction.options.getString("message_id");
-              if (!messageId) return interaction.respond([]);
-              const roles = await fetchRoleMenuRoles(messageId);
-              return interaction.respond(
-                roles.map((role) => ({
-                  name: `Emoji: ${role.emoji} → Rolle: ${role.role_name}`,
-                  value: role.emoji,
-                }))
-              );
-            } else if (focusedOption.name === "role") {
-              const guildRoles = interaction.guild.roles.cache.filter((role) =>
-                role.name
-                  .toLowerCase()
-                  .includes(focusedOption.value.toLowerCase())
-              );
-              const choices = guildRoles.map((role) => ({
-                name: role.name,
-                value: role.id,
-              }));
-              return interaction.respond(choices);
-            }
-          }
-        }
+        return;
       }
 
       // **Slash-Commands**

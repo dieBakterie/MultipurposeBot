@@ -2,23 +2,22 @@
 const queue = new Map(); // GuildID => { songs: [], current: null, connection: null }
 
 /**
- * Holt die Warteschlange für eine bestimmte Guild.
- * Wenn keine Warteschlange existiert, wird eine neue erstellt.
+ * Validiert die Guild-ID und prüft, ob eine Warteschlange existiert.
+ * Erstellt bei Bedarf eine neue Warteschlange.
  * @param {string} guildId - Die ID der Guild
  * @returns {object} - Die Warteschlange für die Guild
  */
-export function getQueue(guildId) {
-  try {
-    if (!guildId) throw new Error("Guild-ID ist erforderlich.");
-
-    if (!queue.has(guildId)) {
-      queue.set(guildId, { songs: [], current: null, connection: null });
-    }
-    return queue.get(guildId);
-  } catch (error) {
-    console.error(`Fehler in getQueue: ${error.message}`);
-    throw error;
+function ensureQueue(guildId) {
+  if (!guildId) {
+    throw new Error("Guild-ID ist erforderlich.");
   }
+
+  if (!queue.has(guildId)) {
+    queue.set(guildId, { songs: [], current: null, connection: null });
+    console.log(`Neue Warteschlange für Guild ${guildId} erstellt.`);
+  }
+
+  return queue.get(guildId);
 }
 
 /**
@@ -27,17 +26,13 @@ export function getQueue(guildId) {
  */
 export function deleteQueue(guildId) {
   try {
-    if (!guildId) throw new Error("Guild-ID ist erforderlich.");
-
-    if (queue.has(guildId)) {
-      queue.delete(guildId);
-      console.log(`Warteschlange für Guild ${guildId} wurde entfernt.`);
-    } else {
+    if (!queue.delete(guildId)) {
       console.warn(`Warteschlange für Guild ${guildId} existiert nicht.`);
+    } else {
+      console.log(`Warteschlange für Guild ${guildId} wurde entfernt.`);
     }
   } catch (error) {
-    console.error(`Fehler in deleteQueue: ${error.message}`);
-    throw error;
+    handleQueueError("deleteQueue", error);
   }
 }
 
@@ -48,16 +43,11 @@ export function deleteQueue(guildId) {
  */
 export function getCurrentSong(guildId) {
   try {
-    if (!guildId) throw new Error("Guild-ID ist erforderlich.");
-
-    if (!queue.has(guildId)) {
-      console.warn(`Warteschlange für Guild ${guildId} existiert nicht.`);
-      return null;
-    }
-    return queue.get(guildId).current;
+    const guildQueue = ensureQueue(guildId);
+    return guildQueue.current;
   } catch (error) {
-    console.error(`Fehler in getCurrentSong: ${error.message}`);
-    throw error;
+    handleQueueError("getCurrentSong", error);
+    return null;
   }
 }
 
@@ -68,66 +58,11 @@ export function getCurrentSong(guildId) {
  */
 export function getNextSong(guildId) {
   try {
-    if (!guildId) throw new Error("Guild-ID ist erforderlich.");
-
-    if (!queue.has(guildId)) {
-      console.warn(`Warteschlange für Guild ${guildId} existiert nicht.`);
-      return null;
-    }
-
-    const guildQueue = getQueue(guildId);
-
-    if (guildQueue.songs.length <= 1) {
-      console.info(
-        `Keine weiteren Songs in der Warteschlange für Guild ${guildId}.`
-      );
-      return null;
-    }
-
-    return guildQueue.songs[1];
+    const guildQueue = ensureQueue(guildId);
+    return guildQueue.songs.length > 1 ? guildQueue.songs[1] : null;
   } catch (error) {
-    console.error(`Fehler in getNextSong: ${error.message}`);
-    throw error;
-  }
-}
-
-/**
- * Überprüft, ob ein nächster Song in der Warteschlange existiert.
- * @param {string} guildId - Die ID der Guild
- * @returns {boolean} - True, wenn ein nächster Song existiert, sonst false
- */
-export function hasNextSong(guildId) {
-  try {
-    if (!guildId) throw new Error("Guild-ID ist erforderlich.");
-
-    if (!queue.has(guildId)) {
-      console.warn(`Warteschlange für Guild ${guildId} existiert nicht.`);
-      return false;
-    }
-    const guildQueue = getQueue(guildId);
-    return guildQueue.songs.length > 1;
-  } catch (error) {
-    console.error(`Fehler in hasNextSong: ${error.message}`);
-    throw error;
-  }
-}
-
-/**
- * Entfernt den aktuellen Song aus der Warteschlange und gibt ihn zurück.
- * @param {string} guildId - Die ID der Guild
- * @returns {object|null} - Der entfernte Song oder null, wenn die Warteschlange leer ist
- */
-export function removeCurrentSong(guildId) {
-  try {
-    if (!guildId) throw new Error("Guild-ID ist erforderlich.");
-
-    const guildQueue = getQueue(guildId);
-    const removedSong = guildQueue.songs.shift();
-    guildQueue.current = guildQueue.songs[0] || null;
-    return removedSong;
-  } catch (error) {
-    console.error(`Fehler in removeCurrentSong: ${error.message}`);
-    throw error;
+    handleQueueError("getNextSong", error);
+    return null;
   }
 }
 
@@ -138,33 +73,53 @@ export function removeCurrentSong(guildId) {
  */
 export function addSong(guildId, song) {
   try {
-    if (!guildId || !song)
-      throw new Error("Guild-ID und Song sind erforderlich.");
+    if (!song || !song.title || !song.url) {
+      throw new Error("Ungültiger Song.");
+    }
 
-    const guildQueue = getQueue(guildId);
+    const guildQueue = ensureQueue(guildId);
     guildQueue.songs.push(song);
     console.log(`Song hinzugefügt: ${song.title}`);
   } catch (error) {
-    console.error(`Fehler in addSong: ${error.message}`);
-    throw error;
+    handleQueueError("addSong", error);
   }
 }
 
 /**
- * Setzt den aktuellen Song in der Warteschlange.
+ * Entfernt einen Song aus der Warteschlange.
  * @param {string} guildId - Die ID der Guild
- * @param {object} song - Der neue aktuelle Song
+ * @param {string|null} songName - Der Titel des Songs (optional). Wenn null, wird der erste Song entfernt.
+ * @returns {object|null} - Der entfernte Song oder null, wenn kein Song gefunden wurde
  */
-export function setCurrentSong(guildId, song) {
+export function removeSong(guildId, songName = null) {
   try {
-    if (!guildId || !song)
-      throw new Error("Guild-ID und Song sind erforderlich.");
+    const guildQueue = ensureQueue(guildId);
 
-    const guildQueue = getQueue(guildId);
-    guildQueue.current = song;
+    if (!songName) {
+      const removedSong = guildQueue.songs.shift();
+      guildQueue.current = guildQueue.songs[0] || null;
+      return removedSong;
+    }
+
+    const songIndex = guildQueue.songs.findIndex((song) =>
+      song.title.toLowerCase().includes(songName.toLowerCase())
+    );
+
+    if (songIndex === -1) {
+      console.warn(`Song "${songName}" nicht gefunden.`);
+      return null;
+    }
+
+    const [removedSong] = guildQueue.songs.splice(songIndex, 1);
+
+    if (songIndex === 0) {
+      guildQueue.current = guildQueue.songs[0] || null;
+    }
+
+    return removedSong;
   } catch (error) {
-    console.error(`Fehler in setCurrentSong: ${error.message}`);
-    throw error;
+    handleQueueError("removeSong", error);
+    return null;
   }
 }
 
@@ -174,15 +129,21 @@ export function setCurrentSong(guildId, song) {
  */
 export function clearQueue(guildId) {
   try {
-    if (!guildId) throw new Error("Guild-ID ist erforderlich.");
-
-    const guildQueue = getQueue(guildId);
+    const guildQueue = ensureQueue(guildId);
     guildQueue.songs = [];
     guildQueue.current = null;
     guildQueue.connection?.disconnect();
     console.log(`Warteschlange für Guild ${guildId} wurde geleert.`);
   } catch (error) {
-    console.error(`Fehler in clearQueue: ${error.message}`);
-    throw error;
+    handleQueueError("clearQueue", error);
   }
+}
+
+/**
+ * Zentrale Fehlerbehandlung für Warteschlangenoperationen.
+ * @param {string} method - Der Name der Methode, die den Fehler ausgelöst hat.
+ * @param {Error} error - Der aufgetretene Fehler.
+ */
+function handleQueueError(method, error) {
+  console.error(`Fehler in ${method}: ${error.message}`);
 }

@@ -7,12 +7,46 @@ import {
   fetchGroupRoles,
   fetchAllGroups,
   updateGroupRole,
+  deleteRoleGroup,
 } from "../../database/rolemenuDatabase.js";
 
 export default {
   data: new SlashCommandBuilder()
     .setName("rolemenu")
     .setDescription("Erstelle und bearbeite RoleMenus.")
+    .addSubcommandGroup((subcommandGroup) =>
+      subcommandGroup
+        .setName("roleGroups")
+        .setDescription("Verwalte RoleGroups.")
+        .addSubcommand((subcommand) =>
+          subcommand
+            .setName("add")
+            .setDescription("Erstelle eine neue RoleGroup.")
+            .addStringOption((option) =>
+              option
+                .setName("group")
+                .setDescription("Der Name der RoleGroup.")
+                .setRequired(true)
+            )
+        )
+        .addSubcommand((subcommand) =>
+          subcommand
+            .setName("delete")
+            .setDescription("Lösche eine existierende RoleGroup.")
+            .addStringOption((option) =>
+              option
+                .setName("group")
+                .setDescription("Der Name der RoleGroup.")
+                .setRequired(true)
+                .setAutocomplete(true)
+            )
+        )
+        .addSubcommand((subcommand) =>
+          subcommand
+            .setName("list")
+            .setDescription("Zeige alle RoleGroups an.")
+        )
+    )
     .addSubcommand((sub) =>
       sub
         .setName("set-group")
@@ -78,16 +112,72 @@ export default {
             .setDescription("Neue Beschriftung für die Rolle.")
         )
         .addStringOption((option) =>
-          option.setName("emoji").setDescription("Neues .emoji/Neue Icon.")
+          option.setName("emoji").setDescription("Neues Emoji/Neue Icon.")
+        )
+    ).addSubcommand((sub) =>
+      sub
+        .setName("delete")
+        .setDescription("Lösche eine existierende Gruppe.")
+        .addStringOption((option) =>
+          option
+            .setName("group")
+            .setDescription("Der Name der Gruppe.")
+            .setRequired(true)
+            .setAutocomplete(true)
+        ).addStringOption((option) =>
+          option
+            .setName("role")
+            .setDescription("Die Rolle, die gelöscht werden soll.")
+            .setRequired(true)
+            .setAutocomplete(true)
+        ).addStringOption((option) =>
+          option
+            .setName("menu")
+            .setDescription("Das RoleMenu, das gelöscht werden soll.")
+            .setRequired(true)
+            .setAutocomplete(true)
         )
     ),
 
   async execute(interaction) {
+    const subcommandGroup = interaction.options.getSubcommandGroup();
     const subcommand = interaction.options.getSubcommand();
     const groupName = interaction.options.getString("group");
 
     try {
-      if (subcommand === "set-group") {
+      if (subcommandGroup === "roleGroups") {
+        if (subcommand === "add") {
+          const groupResult = await createRoleMenuGroup(groupName, "single", interaction.guild.id);
+
+          await interaction.reply({
+            content: `RoleGroup **${groupName}** wurde erstellt.`,
+            ephemeral: true,
+          });
+        } else if (subcommand === "delete") {
+          const deleteResult = await deleteRoleGroup(groupName, interaction.guild.id);
+
+          await interaction.reply({
+            content: `RoleGroup **${groupName}** wurde gelöscht: ${deleteResult.message}`,
+            ephemeral: true,
+          });
+        } else if (subcommand === "list") {
+          const allGroupsResult = await fetchAllGroups(interaction.guild.id);
+
+          if (!allGroupsResult.data || allGroupsResult.data.length === 0) {
+            return interaction.reply({
+              content: `Keine RoleGroups gefunden.`,
+              ephemeral: true,
+            });
+          }
+
+          const groupList = allGroupsResult.data.map((group) => `**${group.group_name}**`).join("\n");
+
+          await interaction.reply({
+            content: `**RoleGroups**\n${groupList}`,
+            ephemeral: true,
+          });
+        }
+      } else if (subcommand === "set-group") {
         const mode = interaction.options.getString("mode");
         const rolesInput = interaction.options.getString("roles");
 
@@ -98,21 +188,28 @@ export default {
         });
 
         // Gruppe erstellen oder aktualisieren
-        await createRoleMenuGroup(groupName, mode, interaction.guild.id);
+        const groupResult = await createRoleMenuGroup(groupName, mode, interaction.guild.id);
 
         // Rollen zur Gruppe hinzufügen
+        const rolesResults = [];
         for (const { roleId, label } of roles) {
-          await addRolesToGroup(groupName, roleId, label, interaction.guild.id);
+          const roleResult = await addRolesToGroup(groupName, roleId, label, interaction.guild.id);
+          rolesResults.push(roleResult);
         }
 
         await interaction.reply({
           content: `Gruppe **${groupName}** wurde erstellt/aktualisiert.`,
           ephemeral: true,
+          embeds: rolesResults.map(result => ({
+            title: 'Rolle hinzugefügt',
+            description: result.message,
+            color: 'GREEN'
+          }))
         });
       } else if (subcommand === "create") {
-        const roles = await fetchGroupRoles(groupName, interaction.guild.id);
+        const rolesResult = await fetchGroupRoles(groupName, interaction.guild.id);
 
-        if (!roles || roles.length === 0) {
+        if (!rolesResult.data || rolesResult.data.length === 0) {
           return interaction.reply({
             content: `Keine Rollen in der Gruppe **${groupName}** gefunden.`,
             ephemeral: true,
@@ -123,18 +220,18 @@ export default {
         const rows = [];
         let actionRow = new MessageActionRow();
 
-        for (let i = 0; i < roles.length; i++) {
-          const { roleId, label, emoji } = roles[i];
+        for (let i = 0; i < rolesResult.data.length; i++) {
+          const { roleId, label, emoji } = rolesResult.data[i];
 
           const button = new ButtonBuilder()
             .setCustomId(`rolemenu_${roleId}`)
             .setLabel(label)
             .setStyle("PRIMARY")
-            .set.emoji(emoji);
+            .setEmoji(emoji);
 
           actionRow.addComponents(button);
 
-          if (actionRow.components.length === 5 || i === roles.length - 1) {
+          if (actionRow.components.length === 5 || i === rolesResult.data.length - 1) {
             rows.push(actionRow);
             actionRow = new MessageActionRow();
           }
@@ -149,17 +246,21 @@ export default {
         const newLabel = interaction.options.getString("new_label");
         const newEmoji = interaction.options.getString("emoji");
 
-        await updateGroupRole(groupName, roleId, newLabel, newEmoji);
+        const updateResult = await updateGroupRole(groupName, roleId, newLabel, newEmoji);
 
         await interaction.reply({
-          content: `Rolle in Gruppe **${groupName}** wurde aktualisiert.`,
+          content: `Rolle in Gruppe **${groupName}** wurde aktualisiert: ${updateResult.message}`,
           ephemeral: true,
         });
       }
     } catch (error) {
-      console.error("[Rolemenu Command] Fehler bei der Verarbeitung des RoleMenus:", error);
+      console.error(
+        "[Rolemenu Command] Fehler bei der Verarbeitung des RoleMenus:",
+        error
+      );
       await interaction.reply({
-        content: "[Rolemenu Command] Fehler bei der Verarbeitung. Versuche es erneut.",
+        content:
+          "[Rolemenu Command] Fehler bei der Verarbeitung. Versuche es erneut.",
         ephemeral: true,
       });
     }
